@@ -112,7 +112,11 @@ python 0_reset_data.py --neo4j-pass abcd1234
 ## GraphRAG (2 script moi)
 
 ### 1) Ingest -> Neo4j + Qdrant (payload co entity_ids)
+```
+python graphrag_ingest_langextract.py --folder testdata --entity-provider langextract --langextract-model-id gemma2:2b --langextract-model-url http://localhost:11434 --neo4j-pass abcd1234 --min-paragraph-chars 150 --skip-llm-short   
 
+python graphrag_ingest_langextract.py --folder testdata --entity-provider langextract --langextract-model-id gemma2:2b --langextract-model-url http://localhost:11434 --neo4j-uri bolt://localhost:7687 --neo4j-user neo4j --neo4j-pass abcd1234 --qdrant-host localhost --qdrant-port 6333 --collection graphrag_entities --embedding-model sentence- transformers/all-MiniLM-L6-v2 --min-paragraph-chars 150 --max-paragraph-chars 1200 --llm-debug --llm-retry-count 3--llm-retry-backoff 2 --skip-llm-short
+```
 Chon 1 trong 4 input:
 
 PDF:
@@ -172,6 +176,13 @@ Bo qua paragraph qua ngan:
 ```bash
 python graphrag_ingest_langextract.py --pdf /path/to/file.pdf --min-paragraph-chars 150
 ```
+
+Bo qua LLM cho paragraph ngan (van luu Qdrant):
+```bash
+python graphrag_ingest_langextract.py --pdf /path/to/file.pdf --min-paragraph-chars 150 --skip-llm-short
+```
+Neu bat `--skip-llm-short`, doan ngan se duoc luu vao Neo4j label `Paragraph` (short=true).
+Doan dai se luu `Paragraph` va lien ket `(:Paragraph)-[:HAS_ENTITY]->(:Entity)`.
 
 ### 2) Query + Generate
 

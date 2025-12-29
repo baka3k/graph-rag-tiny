@@ -142,8 +142,22 @@ def ingest_to_neo4j(
     relations: List[Dict[str, str]],
     source_id: str,
     paragraph_id: int,
+    paragraph_text: str | None = None,
+    is_short: bool = False,
 ) -> None:
     with driver.session() as session:
+        if paragraph_text:
+            session.run(
+                """
+                MERGE (p:Paragraph {source_id: $source_id, paragraph_id: $paragraph_id})
+                SET p.text = $text,
+                    p.short = $is_short
+                """,
+                source_id=source_id,
+                paragraph_id=paragraph_id,
+                text=paragraph_text,
+                is_short=is_short,
+            )
         for node in nodes.values():
             session.run(
                 """
@@ -159,6 +173,17 @@ def ingest_to_neo4j(
                 source_id=source_id,
                 paragraph_id=paragraph_id,
             )
+            if paragraph_text:
+                session.run(
+                    """
+                    MATCH (p:Paragraph {source_id: $source_id, paragraph_id: $paragraph_id})
+                    MATCH (e:Entity {id: $id})
+                    MERGE (p)-[:HAS_ENTITY]->(e)
+                    """,
+                    source_id=source_id,
+                    paragraph_id=paragraph_id,
+                    id=node["id"],
+                )
         for rel in relations:
             session.run(
                 """
@@ -267,14 +292,40 @@ def process_text(
         if not paragraph:
             continue
         if len(paragraph) < args.min_paragraph_chars:
-            print(f"Paragraph {idx + 1}/{len(paragraphs)}: skipped (len={len(paragraph)})")
+            if args.skip_llm_short:
+                print(
+                    f"Paragraph {idx + 1}/{len(paragraphs)}: LLM skipped (len={len(paragraph)})"
+                )
+                print("Ingesting short paragraph to Neo4j...")
+                ingest_to_neo4j(
+                    driver,
+                    {},
+                    [],
+                    source_id,
+                    paragraph_id=idx,
+                    paragraph_text=paragraph,
+                    is_short=True,
+                )
+                print("Neo4j short paragraph stored.")
+                print("Ingesting to Qdrant...")
+                ingest_to_qdrant(qdrant, args.collection, paragraph, idx, embedder, {}, source_id)
+                print("Qdrant ingestion complete.")
+            else:
+                print(f"Paragraph {idx + 1}/{len(paragraphs)}: skipped (len={len(paragraph)})")
             continue
         print(f"Paragraph {idx + 1}/{len(paragraphs)}: extracting entities/relations...")
         nodes, relations = build_graph_components(paragraph, args.entity_provider, nlp=nlp)
         print(f"Extracted {len(nodes)} entities, {len(relations)} relations.")
 
         print("Ingesting to Neo4j...")
-        ingest_to_neo4j(driver, nodes, relations, source_id, paragraph_id=idx)
+        ingest_to_neo4j(
+            driver,
+            nodes,
+            relations,
+            source_id,
+            paragraph_id=idx,
+            paragraph_text=paragraph,
+        )
         print("Neo4j ingestion complete.")
 
         print("Ingesting to Qdrant...")
@@ -293,6 +344,11 @@ def main() -> None:
     parser.add_argument("--embedding-model", default="sentence-transformers/all-MiniLM-L6-v2")
     parser.add_argument("--max-paragraph-chars", type=int, default=1200)
     parser.add_argument("--min-paragraph-chars", type=int, default=150)
+    parser.add_argument(
+        "--skip-llm-short",
+        action="store_true",
+        help="Skip LLM extraction for short paragraphs but still store in Qdrant",
+    )
     parser.add_argument(
         "--entity-provider",
         choices=["spacy", "gemini", "langextract"],
