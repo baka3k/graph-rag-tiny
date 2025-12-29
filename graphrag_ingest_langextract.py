@@ -304,6 +304,8 @@ def main() -> None:
     parser.add_argument("--langextract-model-id", default=os.getenv("LANGEXTRACT_MODEL_ID"))
     parser.add_argument("--langextract-model-url", default=os.getenv("LANGEXTRACT_MODEL_URL"))
     parser.add_argument("--llm-debug", action="store_true", help="Print raw LLM output")
+    parser.add_argument("--llm-retry-count", type=int, default=None)
+    parser.add_argument("--llm-retry-backoff", type=float, default=None)
     parser.add_argument("--neo4j-uri", default=os.getenv("NEO4J_URI", "bolt://localhost:7687"))
     parser.add_argument("--neo4j-user", default=os.getenv("NEO4J_USER", "neo4j"))
     parser.add_argument("--neo4j-pass", default=os.getenv("NEO4J_PASS", "password"))
@@ -321,6 +323,11 @@ def main() -> None:
 
     if args.llm_debug:
         os.environ["LLM_DEBUG"] = "1"
+        os.environ.setdefault("LLM_DEBUG_LOG_PATH", "logs/langextract_raw.log")
+    if args.llm_retry_count is not None:
+        os.environ["LLM_RETRY_COUNT"] = str(args.llm_retry_count)
+    if args.llm_retry_backoff is not None:
+        os.environ["LLM_RETRY_BACKOFF_SECONDS"] = str(args.llm_retry_backoff)
     _set_langextract_overrides(args.langextract_model_id, args.langextract_model_url)
     embedder = SentenceTransformer(args.embedding_model)
 

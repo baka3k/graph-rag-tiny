@@ -1,6 +1,9 @@
 import json
+import logging
 import os
 import textwrap
+import time
+from pathlib import Path
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -50,6 +53,38 @@ def _coerce_attr(value: Any) -> str:
 
 def _debug_llm_output() -> bool:
     return os.getenv("LLM_DEBUG", "").strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _setup_llm_debug_logging() -> None:
+    if not _debug_llm_output():
+        return
+    logger = logging.getLogger()
+    if getattr(logger, "_llm_debug_configured", False):
+        return
+    log_path = os.getenv("LLM_DEBUG_LOG_PATH", "logs/langextract_raw.log")
+    path = Path(log_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler(path, encoding="utf-8")
+    handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+    logger._llm_debug_configured = True
+
+
+def _get_retry_settings() -> tuple[int, float]:
+    attempts = os.getenv("LLM_RETRY_COUNT", "3")
+    backoff = os.getenv("LLM_RETRY_BACKOFF_SECONDS", "2")
+    try:
+        attempts_val = max(1, int(attempts))
+    except ValueError:
+        attempts_val = 3
+    try:
+        backoff_val = max(0.0, float(backoff))
+    except ValueError:
+        backoff_val = 2.0
+    return attempts_val, backoff_val
 
 
 def build_spacy_pipeline(model: str, ruler_json: str | None = None):
@@ -207,14 +242,17 @@ def extract_entities_gemini(text: str) -> Tuple[List[Dict[str, str]], List[Dict[
     )
 
     if _debug_llm_output():
+        _setup_llm_debug_logging()
         print("LLM prompt (gemini):")
         print(prompt)
+        logging.debug("LLM prompt (gemini): %s", prompt)
 
     response = model.generate_content(prompt)
     raw_content = getattr(response, "text", "") or ""
     if _debug_llm_output():
         print("LLM raw output (gemini):")
         print(raw_content)
+        logging.debug("LLM raw output (gemini): %s", raw_content)
     content = _extract_json_payload(raw_content)
     try:
         data = json.loads(content)
@@ -544,8 +582,10 @@ def extract_entities_langextract(text: str) -> Tuple[List[Dict[str, str]], List[
     ]
 
     if _debug_llm_output():
+        _setup_llm_debug_logging()
         print("LLM prompt (langextract):")
         print(prompt)
+        logging.debug("LLM prompt (langextract): %s", prompt)
 
     def _run_langextract(
         fence: bool | None, schema_constraints: bool | None
@@ -560,17 +600,28 @@ def extract_entities_langextract(text: str) -> Tuple[List[Dict[str, str]], List[
             fence_output=fence,
             use_schema_constraints=schema_constraints,
             show_progress=False,
+            debug=_debug_llm_output(),
         )
 
-    try:
-        result = _run_langextract(fence_output, use_schema_constraints)
-    except Exception as exc:
-        print(f"LangExtract parse failed, retrying with strict JSON output: {exc}")
+    max_attempts, backoff_seconds = _get_retry_settings()
+    for attempt in range(1, max_attempts + 1):
         try:
-            result = _run_langextract(True, True)
-        except Exception as exc_retry:
-            print(f"LangExtract retry failed, skipping paragraph: {exc_retry}")
-            return [], []
+            if attempt == 1:
+                result = _run_langextract(fence_output, use_schema_constraints)
+            else:
+                result = _run_langextract(True, True)
+            break
+        except Exception as exc:
+            logging.exception("LangExtract attempt %s failed", attempt)
+            if attempt >= max_attempts:
+                print(f"LangExtract retry failed, skipping paragraph: {exc}")
+                return [], []
+            print(
+                f"LangExtract parse failed, retrying with strict JSON output "
+                f"(attempt {attempt + 1}/{max_attempts}): {exc}"
+            )
+            if backoff_seconds > 0:
+                time.sleep(backoff_seconds)
 
     document = result[0] if isinstance(result, list) else result
     extractions = document.extractions or []

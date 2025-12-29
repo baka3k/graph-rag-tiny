@@ -152,9 +152,20 @@ Tuy chon Qdrant/Neo4j/Embedding:
 python graphrag_ingest_langextract.py --pdf /path/to/file.pdf --collection graphrag_entities --embedding-model sentence-transformers/all-MiniLM-L6-v2 --neo4j-uri bolt://localhost:7687 --neo4j-user neo4j --neo4j-pass abcd1234 --qdrant-host localhost --qdrant-port 6333
 ```
 
+Lenh day du (folder + Ollama + Neo4j/Qdrant + retry/log):
+```bash
+python graphrag_ingest_langextract.py --folder testdata --entity-provider langextract --langextract-model-id gemma2:2b --langextract-model-url http://localhost:11434 --neo4j-uri bolt://localhost:7687 --neo4j-user neo4j --neo4j-pass abcd1234 --qdrant-host localhost --qdrant-port 6333 --collection graphrag_entities --embedding-model sentence-transformers/all-MiniLM-L6-v2 --min-paragraph-chars 150 --max-paragraph-chars 1200 --llm-debug --llm-retry-count 3 --llm-retry-backoff 2
+```
+
 Bat log output LLM:
 ```bash
 python graphrag_ingest_langextract.py --pdf /path/to/file.pdf --entity-provider langextract --llm-debug
+```
+Log raw output se duoc luu o `logs/langextract_raw.log` (co the override bang env `LLM_DEBUG_LOG_PATH`).
+
+Tuy chon retry/backoff khi parse loi:
+```bash
+python graphrag_ingest_langextract.py --pdf /path/to/file.pdf --entity-provider langextract --llm-retry-count 3 --llm-retry-backoff 2
 ```
 
 Bo qua paragraph qua ngan:
