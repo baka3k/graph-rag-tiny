@@ -1,0 +1,460 @@
+{
+    "patterns": [
+        {
+            "label": "PRODUCT",
+            "pattern": "Digital Key"
+        },
+        {
+            "label": "ORG",
+            "pattern": "Car Connectivity Consortium"
+        },
+        {
+            "label": "ORG",
+            "pattern": "CCC LLC"
+        },
+        {
+            "label": "ORG",
+            "pattern": "Zalo"
+        },
+        {
+            "label": "DOCUMENT",
+            "pattern": "Technical Specification"
+        },
+        {
+            "label": "DOCUMENT",
+            "pattern": "Digital Key Technical Specification"
+        },
+        {
+            "label": "DOCUMENT",
+            "pattern": "Giao thức mã hóa đầu cuối"
+        },
+        {
+            "label": "STANDARD",
+            "pattern": "RFC 5280"
+        },
+        {
+            "label": "STANDARD",
+            "pattern": "IEEE 802.11"
+        },
+        {
+            "label": "STANDARD",
+            "pattern": [
+                {
+                    "LOWER": "iso"
+                },
+                {
+                    "IS_DIGIT": true
+                }
+            ]
+        },
+        {
+            "label": "TRANSPORT",
+            "pattern": "NFC"
+        },
+        {
+            "label": "TRANSPORT",
+            "pattern": "NFC-F"
+        },
+        {
+            "label": "TRANSPORT",
+            "pattern": "Bluetooth LE"
+        },
+        {
+            "label": "TRANSPORT",
+            "pattern": "Bluetooth"
+        },
+        {
+            "label": "TRANSPORT",
+            "pattern": "UWB"
+        },
+        {
+            "label": "CRYPTO",
+            "pattern": "AES-CCM"
+        },
+        {
+            "label": "CRYPTO",
+            "pattern": "AES-256-GCM"
+        },
+        {
+            "label": "CRYPTO",
+            "pattern": [
+                {
+                    "LOWER": "aes"
+                },
+                {
+                    "IS_DIGIT": true
+                }
+            ]
+        },
+        {
+            "label": "CRYPTO",
+            "pattern": "CMAC"
+        },
+        {
+            "label": "CRYPTO",
+            "pattern": "ECDSA"
+        },
+        {
+            "label": "CRYPTO",
+            "pattern": "RSA"
+        },
+        {
+            "label": "KDF_HASH",
+            "pattern": "HMAC"
+        },
+        {
+            "label": "KDF_HASH",
+            "pattern": "HKDF"
+        },
+        {
+            "label": "KDF_HASH",
+            "pattern": "HKDF-SHA-256"
+        },
+        {
+            "label": "KDF_HASH",
+            "pattern": "HMAC-SHA256"
+        },
+        {
+            "label": "KDF_HASH",
+            "pattern": [
+                {
+                    "LOWER": "sha"
+                },
+                {
+                    "IS_DIGIT": true
+                }
+            ]
+        },
+        {
+            "label": "ALGORITHM",
+            "pattern": "SPAKE2+"
+        },
+        {
+            "label": "ALGORITHM",
+            "pattern": "X3DH"
+        },
+        {
+            "label": "ALGORITHM",
+            "pattern": "Double Ratchet"
+        },
+        {
+            "label": "ALGORITHM",
+            "pattern": "Sesame"
+        },
+        {
+            "label": "ALGORITHM",
+            "pattern": "Diffie-Hellman"
+        },
+        {
+            "label": "ALGORITHM",
+            "pattern": "Elliptic curve DH"
+        },
+        {
+            "label": "ALGORITHM",
+            "pattern": "Curve25519"
+        },
+        {
+            "label": "ALGORITHM",
+            "pattern": "NIST P-256"
+        },
+        {
+            "label": "ALGORITHM",
+            "pattern": "prime256v1"
+        },
+        {
+            "label": "INTERFACE",
+            "pattern": "Vehicle NFC Readers"
+        },
+        {
+            "label": "ENTITY",
+            "pattern": "Vehicle OEM"
+        },
+        {
+            "label": "ENTITY",
+            "pattern": "Device OEM"
+        },
+        {
+            "label": "ENTITY",
+            "pattern": "Key Tracking Server"
+        },
+        {
+            "label": "ENTITY",
+            "pattern": "KTS"
+        },
+        {
+            "label": "ENTITY",
+            "pattern": "Owner"
+        },
+        {
+            "label": "ENTITY",
+            "pattern": "Friend"
+        },
+        {
+            "label": "ENTITY",
+            "pattern": "Device"
+        },
+        {
+            "label": "ENTITY",
+            "pattern": "Vehicle"
+        },
+        {
+            "label": "CERT",
+            "pattern": "X.509"
+        },
+        {
+            "label": "CERT",
+            "pattern": "Instance CA"
+        },
+        {
+            "label": "CERT",
+            "pattern": "External CA"
+        },
+        {
+            "label": "CERT",
+            "pattern": "Vehicle OEM CA"
+        },
+        {
+            "label": "UI",
+            "pattern": "Vehicle UI"
+        },
+        {
+            "label": "API",
+            "pattern": "manageKey"
+        },
+        {
+            "label": "API",
+            "pattern": "eventNotification"
+        },
+        {
+            "label": "MESSAGE_FLOW",
+            "pattern": "Owner Pairing"
+        },
+        {
+            "label": "MESSAGE_FLOW",
+            "pattern": "Key Sharing"
+        },
+        {
+            "label": "MESSAGE_FLOW",
+            "pattern": "Owner Pairing Flow"
+        },
+        {
+            "label": "VERSION",
+            "pattern": [
+                {
+                    "LOWER": "version"
+                },
+                {
+                    "IS_ASCII": true
+                }
+            ]
+        },
+        {
+            "label": "VERSION",
+            "pattern": "1.2.1"
+        },
+        {
+            "label": "VERSION",
+            "pattern": "1.2.0"
+        },
+        {
+            "label": "TESTVECTOR",
+            "pattern": "Test Vectors"
+        },
+        {
+            "label": "TABLE",
+            "pattern": "Table"
+        },
+        {
+            "label": "FIGURE",
+            "pattern": "Figure"
+        },
+        {
+            "label": "KEYWORD",
+            "pattern": "attestation"
+        },
+        {
+            "label": "KEYWORD",
+            "pattern": "attestate"
+        },
+        {
+            "label": "KEYWORD",
+            "pattern": "attestor"
+        },
+        {
+            "label": "KEYWORD",
+            "pattern": "attest"
+        },
+        {
+            "label": "ABBR",
+            "pattern": "URSK"
+        },
+        {
+            "label": "ABBR",
+            "pattern": "URSK_KT"
+        },
+        {
+            "label": "ABBR",
+            "pattern": "OEM"
+        },
+        {
+            "label": "ABBR",
+            "pattern": "SE"
+        },
+        {
+            "label": "SERVER",
+            "pattern": "Device OEM Server"
+        },
+        {
+            "label": "SERVER",
+            "pattern": "Vehicle OEM Server"
+        },
+        {
+            "label": "SERVER",
+            "pattern": "Key Tracking Server"
+        },
+        {
+            "label": "SERVER",
+            "pattern": "Relay Server"
+        },
+        {
+            "label": "ENDPOINT",
+            "pattern": "endpoint"
+        },
+        {
+            "label": "ENDPOINT",
+            "pattern": "Device"
+        },
+        {
+            "label": "ENDPOINT",
+            "pattern": "thiết bị"
+        },
+        {
+            "label": "KEY_MATERIAL",
+            "pattern": "Identity Key"
+        },
+        {
+            "label": "KEY_MATERIAL",
+            "pattern": "Signed PreKeys"
+        },
+        {
+            "label": "KEY_MATERIAL",
+            "pattern": "One-Time Prekeys"
+        },
+        {
+            "label": "KEY_MATERIAL",
+            "pattern": "Ephemeral Key"
+        },
+        {
+            "label": "KEY_MATERIAL",
+            "pattern": "Root Key"
+        },
+        {
+            "label": "KEY_MATERIAL",
+            "pattern": "Chain Key"
+        },
+        {
+            "label": "KEY_MATERIAL",
+            "pattern": "Message Key"
+        },
+        {
+            "label": "KEY_MATERIAL",
+            "pattern": "Secret Key"
+        },
+        {
+            "label": "KEY_MATERIAL",
+            "pattern": "SK"
+        },
+        {
+            "label": "KEY_MATERIAL",
+            "pattern": "RK"
+        },
+        {
+            "label": "KEY_MATERIAL",
+            "pattern": "CK"
+        },
+        {
+            "label": "KEY_MATERIAL",
+            "pattern": "MK"
+        },
+        {
+            "label": "KEY_MATERIAL",
+            "pattern": "I"
+        },
+        {
+            "label": "KEY_MATERIAL",
+            "pattern": "S"
+        },
+        {
+            "label": "KEY_MATERIAL",
+            "pattern": "O"
+        },
+        {
+            "label": "KEY_MATERIAL",
+            "pattern": "E"
+        },
+        {
+            "label": "KEY_MATERIAL",
+            "pattern": "D"
+        },
+        {
+            "label": "KEY_MATERIAL",
+            "pattern": "ECDH"
+        },
+        {
+            "label": "MESSAGE_TYPE",
+            "pattern": "prekey bundle"
+        },
+        {
+            "label": "MESSAGE_TYPE",
+            "pattern": "handshake"
+        },
+        {
+            "label": "MESSAGE_TYPE",
+            "pattern": "ciphertext message"
+        },
+        {
+            "label": "MESSAGE_TYPE",
+            "pattern": "plaintext"
+        },
+        {
+            "label": "MESSAGE_TYPE",
+            "pattern": "initial message"
+        },
+        {
+            "label": "MESSAGE_TYPE",
+            "pattern": "response message"
+        },
+        {
+            "label": "MESSAGE_TYPE",
+            "pattern": "attestation request"
+        },
+        {
+            "label": "MESSAGE_TYPE",
+            "pattern": "attestation response"
+        },
+        {
+            "label": "PROTOCOL",
+            "pattern": "Bluetooth LE Timesync"
+        },
+        {
+            "label": "PROTOCOL",
+            "pattern": "Ranging"
+        },
+        {
+            "label": "SECURITY",
+            "pattern": "privacy"
+        },
+        {
+            "label": "SECURITY",
+            "pattern": "encryption"
+        },
+        {
+            "label": "NUMERIC",
+            "pattern": [
+                {
+                    "IS_DIGIT": true
+                }
+            ]
+        }
+    ]
+}

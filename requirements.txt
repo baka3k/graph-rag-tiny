@@ -1,0 +1,13 @@
+neo4j
+neo4j-graphrag
+qdrant-client
+python-dotenv
+pydantic
+openai
+langextract
+google-generativeai
+pypdf
+sentence-transformers
+spacy
+fastmcp
+python-dotenv

@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.pyc
+
+.env
+.env.*
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+
+build/
+dist/
+*.egg-info/
+
+.idea/
+.vscode/
+.DS_Store
+
+# Local cache/storage (vector db, temporary state)
+storage/

@@ -1,0 +1,16 @@
+{
+  "patterns": [
+    { "label": "PRODUCT", "pattern": "Digital Key" },
+    { "label": "ORG", "pattern": "Car Connectivity Consortium" },
+    { "label": "STANDARD", "pattern": [{ "LOWER": "iso" }, { "IS_DIGIT": true }] },
+    { "label": "STANDARD", "pattern": "IEEE 802.11" },
+    { "label": "STANDARD", "pattern": "RFC 5280" },
+    { "label": "CRYPTO", "pattern": [{ "LOWER": "aes" }, { "IS_DIGIT": true }] },
+    { "label": "CRYPTO", "pattern": [{ "LOWER": "sha" }, { "IS_DIGIT": true }] },
+    { "label": "CRYPTO", "pattern": "ECDSA" },
+    { "label": "CRYPTO", "pattern": "RSA" },
+    { "label": "CRYPTO", "pattern": "HMAC" },
+    { "label": "CRYPTO", "pattern": "HKDF" },
+    { "label": "CRYPTO", "pattern": "TLS" }
+  ]
+}

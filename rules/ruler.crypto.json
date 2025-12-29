@@ -1,0 +1,11 @@
+{
+  "patterns": [
+    { "label": "CRYPTO", "pattern": "ECDSA" },
+    { "label": "CRYPTO", "pattern": "RSA" },
+    { "label": "CRYPTO", "pattern": "HMAC" },
+    { "label": "CRYPTO", "pattern": "HKDF" },
+    { "label": "CRYPTO", "pattern": "TLS" },
+    { "label": "CRYPTO", "pattern": [{ "LOWER": "aes" }, { "IS_DIGIT": true }] },
+    { "label": "CRYPTO", "pattern": [{ "LOWER": "sha" }, { "IS_DIGIT": true }] }
+  ]
+}
