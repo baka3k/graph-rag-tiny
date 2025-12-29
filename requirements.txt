@@ -7,7 +7,10 @@ openai
 langextract
 google-generativeai
 pypdf
+python-docx
+python-pptx
 sentence-transformers
 spacy
 fastmcp
 python-dotenv
+lxml

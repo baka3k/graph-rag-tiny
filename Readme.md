@@ -18,6 +18,8 @@ python main.py
 - `5_ingest_folder.py`: xu ly tat ca PDF trong folder
 - `0_reset_data.py`: reset data
 - `mcp_graph_rag.py`: MCP server (HTTP)
+- `graphrag_ingest_langextract.py`: ingest GraphRAG (LangExtract) -> Neo4j + Qdrant (payload co entity_ids)
+- `graphrag_query_langextract.py`: query GraphRAG (Qdrant + Neo4j) + generate answer
 
 ## Quick start
 
@@ -105,6 +107,99 @@ python 0_reset_data.py --doc-id MY_DOC_ID --neo4j-pass abcd1234
 
 ```bash
 python 0_reset_data.py --neo4j-pass abcd1234
+```
+
+## GraphRAG (2 script moi)
+
+### 1) Ingest -> Neo4j + Qdrant (payload co entity_ids)
+
+Chon 1 trong 4 input:
+
+PDF:
+```bash
+python graphrag_ingest_langextract.py --pdf /path/to/file.pdf --entity-provider langextract
+```
+
+Text file:
+```bash
+python graphrag_ingest_langextract.py --text-file /path/to/file.txt --entity-provider gemini
+```
+
+Raw text:
+```bash
+python graphrag_ingest_langextract.py --raw-text "Alice works at Acme." --entity-provider spacy
+```
+
+Folder (de quy):
+```bash
+python graphrag_ingest_langextract.py --folder /path/to/folder --entity-provider langextract
+```
+
+Ho tro file: `.pdf`, `.txt`, `.md`, `.docx`, `.pptx`.
+
+Tuy chon cho spaCy:
+```bash
+python graphrag_ingest_langextract.py --pdf /path/to/file.pdf --entity-provider spacy --spacy-model en_core_web_sm --ruler-json /path/to/rules
+```
+
+Tuy chon LangExtract (Ollama):
+```bash
+python graphrag_ingest_langextract.py --pdf /path/to/file.pdf --entity-provider langextract --langextract-model-id gemma2:2b --langextract-model-url http://localhost:11434
+```
+
+Tuy chon Qdrant/Neo4j/Embedding:
+```bash
+python graphrag_ingest_langextract.py --pdf /path/to/file.pdf --collection graphrag_entities --embedding-model sentence-transformers/all-MiniLM-L6-v2 --neo4j-uri bolt://localhost:7687 --neo4j-user neo4j --neo4j-pass abcd1234 --qdrant-host localhost --qdrant-port 6333
+```
+
+Bat log output LLM:
+```bash
+python graphrag_ingest_langextract.py --pdf /path/to/file.pdf --entity-provider langextract --llm-debug
+```
+
+Bo qua paragraph qua ngan:
+```bash
+python graphrag_ingest_langextract.py --pdf /path/to/file.pdf --min-paragraph-chars 150
+```
+
+### 2) Query + Generate
+
+Co ban:
+```bash
+python graphrag_query_langextract.py --query "How is Alice related to Acme?" --llm-model gemini-2.5-flash
+```
+
+Tuy chon Qdrant/Neo4j/Embedding:
+```bash
+python graphrag_query_langextract.py --query "How is Alice related to Acme?" --collection graphrag_entities --top-k 5 --embedding-model sentence-transformers/all-MiniLM-L6-v2 --neo4j-uri bolt://localhost:7687 --neo4j-user neo4j --neo4j-pass abcd1234 --qdrant-host localhost --qdrant-port 6333
+```
+
+Generate bang Ollama:
+```bash
+python graphrag_query_langextract.py --query "How is Alice related to Acme?" --llm-model gemma2:2b --langextract-model-url http://localhost:11434
+```
+
+### Env goi y (LangExtract/Gemini/OpenAI/Ollama)
+
+```
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASS=abcd1234
+QDRANT_HOST=localhost
+QDRANT_PORT=6333
+QDRANT_URL=http://localhost:6333
+QDRANT_KEY=your_qdrant_api_key
+
+LANGEXTRACT_API_KEY=your_key
+LANGEXTRACT_MODEL_ID=gemini-2.5-flash
+
+# Neu dung LangExtract + Ollama:
+# LANGEXTRACT_MODEL_ID=gemma2:2b
+# LANGEXTRACT_MODEL_URL=http://localhost:11434
+
+# Neu dung OpenAI:
+# LANGEXTRACT_MODEL_ID=gpt-4o
+# OPENAI_API_KEY=your_key
 ```
 
 ## MCP server (HTTP)

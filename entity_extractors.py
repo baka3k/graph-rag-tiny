@@ -48,6 +48,10 @@ def _coerce_attr(value: Any) -> str:
     return str(value)
 
 
+def _debug_llm_output() -> bool:
+    return os.getenv("LLM_DEBUG", "").strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 def build_spacy_pipeline(model: str, ruler_json: str | None = None):
     import spacy
 
@@ -202,8 +206,16 @@ def extract_entities_gemini(text: str) -> Tuple[List[Dict[str, str]], List[Dict[
         f"Text:\n{text}"
     )
 
+    if _debug_llm_output():
+        print("LLM prompt (gemini):")
+        print(prompt)
+
     response = model.generate_content(prompt)
-    content = _extract_json_payload(getattr(response, "text", "") or "")
+    raw_content = getattr(response, "text", "") or ""
+    if _debug_llm_output():
+        print("LLM raw output (gemini):")
+        print(raw_content)
+    content = _extract_json_payload(raw_content)
     try:
         data = json.loads(content)
     except json.JSONDecodeError:
@@ -232,6 +244,7 @@ def extract_entities_langextract(text: str) -> Tuple[List[Dict[str, str]], List[
 
     api_key = os.getenv("LANGEXTRACT_API_KEY")
     model_id = os.getenv("LANGEXTRACT_MODEL_ID", "gemini-2.5-flash")
+    model_url = os.getenv("LANGEXTRACT_MODEL_URL")
 
     fence_output = _env_flag("LANGEXTRACT_FENCE_OUTPUT")
     use_schema_constraints = _env_flag("LANGEXTRACT_USE_SCHEMA_CONSTRAINTS")
@@ -247,11 +260,23 @@ def extract_entities_langextract(text: str) -> Tuple[List[Dict[str, str]], List[
 
     prompt = textwrap.dedent(
         """\
-        Extract entities and relations in order of appearance.
-        Use exact text spans from the input for extraction_text.
+        You are an information extraction system. Extract high-signal entities and explicit
+        relations from the input. Use exact text spans from the input for extraction_text.
+        Prefer canonical names (no pronouns) and avoid generic words (e.g., "system", "device")
+        unless they are clearly named entities in the text.
+
+        Entity rules:
+        - Include people, orgs, products, standards, protocols, locations, and key technical terms.
+        - Use concise, normalized entity types: PERSON, ORG, PRODUCT, GPE, DATE, TECH, CRYPTO, STANDARD.
+        - Deduplicate entities by exact surface form; do not invent new names.
+
+        Relation rules:
+        - Only create relations that are stated or strongly implied in the text.
+        - Use short relation labels in UPPER_SNAKE_CASE (e.g., EMPLOYED_BY, PART_OF, USES, LOCATED_IN).
+        - Source/target must match entity text spans.
 
         Classes:
-        - entity: attributes {"type": "..."} (e.g., PERSON, ORG, PRODUCT, GPE, DATE, TECH).
+        - entity: attributes {"type": "..."}.
         - relation: attributes {"source": "...", "relation": "...", "target": "..."}.
         """
     )
@@ -294,24 +319,271 @@ def extract_entities_langextract(text: str) -> Tuple[List[Dict[str, str]], List[
                     },
                 ),
             ],
-        )
+        ),
+        lx.data.ExampleData(
+            text="ISO 15118 enables Plug&Charge for the Digital Key project in Berlin.",
+            extractions=[
+                lx.data.Extraction(
+                    extraction_class="entity",
+                    extraction_text="ISO 15118",
+                    attributes={"type": "STANDARD"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="entity",
+                    extraction_text="Plug&Charge",
+                    attributes={"type": "TECH"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="entity",
+                    extraction_text="Digital Key",
+                    attributes={"type": "PRODUCT"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="entity",
+                    extraction_text="Berlin",
+                    attributes={"type": "GPE"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="relation",
+                    extraction_text="enables",
+                    attributes={
+                        "source": "ISO 15118",
+                        "relation": "ENABLES",
+                        "target": "Plug&Charge",
+                    },
+                ),
+                lx.data.Extraction(
+                    extraction_class="relation",
+                    extraction_text="for",
+                    attributes={
+                        "source": "Plug&Charge",
+                        "relation": "USED_IN",
+                        "target": "Digital Key",
+                    },
+                ),
+                lx.data.Extraction(
+                    extraction_class="relation",
+                    extraction_text="in",
+                    attributes={
+                        "source": "Digital Key",
+                        "relation": "LOCATED_IN",
+                        "target": "Berlin",
+                    },
+                ),
+            ],
+        ),
+        lx.data.ExampleData(
+            text=(
+                "Car Connectivity Consortium (CCC) defines Digital Key. "
+                "Digital Key uses AES-256 and ECC for encryption and key exchange. "
+                "ISO/IEC 18013-5 specifies mDL security requirements."
+            ),
+            extractions=[
+                lx.data.Extraction(
+                    extraction_class="entity",
+                    extraction_text="Car Connectivity Consortium",
+                    attributes={"type": "ORG"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="entity",
+                    extraction_text="CCC",
+                    attributes={"type": "ORG"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="entity",
+                    extraction_text="Digital Key",
+                    attributes={"type": "PRODUCT"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="entity",
+                    extraction_text="AES-256",
+                    attributes={"type": "CRYPTO"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="entity",
+                    extraction_text="ECC",
+                    attributes={"type": "CRYPTO"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="entity",
+                    extraction_text="ISO/IEC 18013-5",
+                    attributes={"type": "STANDARD"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="relation",
+                    extraction_text="defines",
+                    attributes={
+                        "source": "Car Connectivity Consortium",
+                        "relation": "DEFINES",
+                        "target": "Digital Key",
+                    },
+                ),
+                lx.data.Extraction(
+                    extraction_class="relation",
+                    extraction_text="uses",
+                    attributes={
+                        "source": "Digital Key",
+                        "relation": "USES",
+                        "target": "AES-256",
+                    },
+                ),
+                lx.data.Extraction(
+                    extraction_class="relation",
+                    extraction_text="uses",
+                    attributes={
+                        "source": "Digital Key",
+                        "relation": "USES",
+                        "target": "ECC",
+                    },
+                ),
+                lx.data.Extraction(
+                    extraction_class="relation",
+                    extraction_text="specifies",
+                    attributes={
+                        "source": "ISO/IEC 18013-5",
+                        "relation": "SPECIFIES",
+                        "target": "mDL security requirements",
+                    },
+                ),
+            ],
+        ),
+        lx.data.ExampleData(
+            text=(
+                "The mobile endpoint uses PKI for authentication. "
+                "Host Card Emulation (HCE) enables the mobile device to emulate a card for the vehicle. "
+                "The vehicle endpoint validates the mobile endpoint over NFC."
+            ),
+            extractions=[
+                lx.data.Extraction(
+                    extraction_class="entity",
+                    extraction_text="mobile endpoint",
+                    attributes={"type": "TECH"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="entity",
+                    extraction_text="PKI",
+                    attributes={"type": "CRYPTO"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="entity",
+                    extraction_text="Host Card Emulation",
+                    attributes={"type": "TECH"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="entity",
+                    extraction_text="HCE",
+                    attributes={"type": "TECH"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="entity",
+                    extraction_text="mobile device",
+                    attributes={"type": "TECH"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="entity",
+                    extraction_text="vehicle",
+                    attributes={"type": "TECH"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="entity",
+                    extraction_text="vehicle endpoint",
+                    attributes={"type": "TECH"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="entity",
+                    extraction_text="NFC",
+                    attributes={"type": "TECH"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="relation",
+                    extraction_text="uses",
+                    attributes={
+                        "source": "mobile endpoint",
+                        "relation": "USES",
+                        "target": "PKI",
+                    },
+                ),
+                lx.data.Extraction(
+                    extraction_class="relation",
+                    extraction_text="enables",
+                    attributes={
+                        "source": "Host Card Emulation",
+                        "relation": "ENABLES",
+                        "target": "mobile device",
+                    },
+                ),
+                lx.data.Extraction(
+                    extraction_class="relation",
+                    extraction_text="emulate",
+                    attributes={
+                        "source": "mobile device",
+                        "relation": "EMULATES",
+                        "target": "card",
+                    },
+                ),
+                lx.data.Extraction(
+                    extraction_class="relation",
+                    extraction_text="validates",
+                    attributes={
+                        "source": "vehicle endpoint",
+                        "relation": "VALIDATES",
+                        "target": "mobile endpoint",
+                    },
+                ),
+                lx.data.Extraction(
+                    extraction_class="relation",
+                    extraction_text="over",
+                    attributes={
+                        "source": "vehicle endpoint",
+                        "relation": "COMMUNICATES_OVER",
+                        "target": "NFC",
+                    },
+                ),
+            ],
+        ),
     ]
 
-    result = lx.extract(
-        text_or_documents=text,
-        prompt_description=prompt,
-        examples=examples,
-        model_id=model_id,
-        api_key=api_key,
-        fence_output=fence_output,
-        use_schema_constraints=use_schema_constraints,
-        show_progress=False,
-    )
+    if _debug_llm_output():
+        print("LLM prompt (langextract):")
+        print(prompt)
+
+    def _run_langextract(
+        fence: bool | None, schema_constraints: bool | None
+    ):
+        return lx.extract(
+            text_or_documents=text,
+            prompt_description=prompt,
+            examples=examples,
+            model_id=model_id,
+            api_key=api_key,
+            model_url=model_url,
+            fence_output=fence,
+            use_schema_constraints=schema_constraints,
+            show_progress=False,
+        )
+
+    try:
+        result = _run_langextract(fence_output, use_schema_constraints)
+    except Exception as exc:
+        print(f"LangExtract parse failed, retrying with strict JSON output: {exc}")
+        try:
+            result = _run_langextract(True, True)
+        except Exception as exc_retry:
+            print(f"LangExtract retry failed, skipping paragraph: {exc_retry}")
+            return [], []
 
     document = result[0] if isinstance(result, list) else result
     extractions = document.extractions or []
     entities: List[Dict[str, str]] = []
     relations: List[Dict[str, str]] = []
+
+    if _debug_llm_output():
+        print("LLM structured output (langextract):")
+        for extraction in extractions:
+            cls = (extraction.extraction_class or "").strip()
+            text_value = (extraction.extraction_text or "").strip()
+            attrs = extraction.attributes or {}
+            print({"class": cls, "text": text_value, "attributes": attrs})
 
     for extraction in extractions:
         cls = (extraction.extraction_class or "").strip().lower()
