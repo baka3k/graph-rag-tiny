@@ -268,9 +268,10 @@ Ghi chu: neu dung OpenAI voi LangExtract, can cai them `langextract[openai]`.
 
 ### MCP tools
 
-- `query_graph_rag(query, top_k, doc_id, source_id, include_entities, include_relations, entity_types, expand_related, related_scope, related_k)`
+- `query_graph_rag(query, top_k, doc_id, source_id, collection, include_entities, include_relations, entity_types, expand_related, related_scope, related_k)`
 - `list_docs(limit)`
-- `query_graph_rag_langextract(query, top_k, source_id, include_entities, include_relations, expand_related, related_k, entity_types, max_passage_chars)`
+- `query_graph_rag_langextract(query, top_k, source_id, collection, include_entities, include_relations, expand_related, related_k, entity_types, max_passage_chars)`
+- `list_qdrant_collections()`
 
 Note: `query_graph_rag_langextract` su dung payload `entity_ids` tu Qdrant (tu ingest bang `graphrag_ingest_langextract.py`).
 
@@ -279,6 +280,7 @@ Goi mau:
 ```
 query_graph_rag(query="Digital Key encryption info", top_k=3, include_entities=true, include_relations=true, entity_types=["ORG"], related_scope="same-doc", related_k=3)
 query_graph_rag_langextract(query="Digital Key encryption info", top_k=5, source_id="my_doc", include_entities=true, include_relations=true, related_k=50, max_passage_chars=800)
+list_qdrant_collections()
 ```
 
 ### So sanh MCP tools
@@ -292,6 +294,7 @@ query_graph_rag_langextract(query="Digital Key encryption info", top_k=5, source
 | Filter | `doc_id` (va `source_id` neu payload co) | `source_id` |
 | Diem manh | Don gian, nhanh cho pipeline cu | Phu hop GraphRAG moi, payload tu LLM extract, linh hoat |
 | Diem yeu | Khong dung duoc payload `entity_ids` | Yeu cau ingest bang script moi |
+| Use case | PDF->Chunk->Neo4j/Qdrant co doc_id/chunk_id | GraphRAG entity payload + paragraph_id |
 
 ## EntityRuler JSON format
 File JSON co the la list hoac object:

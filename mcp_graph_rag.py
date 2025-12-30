@@ -88,8 +88,10 @@ def qdrant_search(
     top_k: int,
     doc_id: Optional[str],
     source_id: Optional[str] = None,
+    collection: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     qdrant = get_qdrant()
+    collection_name = collection or QDRANT_COLLECTION
     qdrant_filter = None
     must = []
     if doc_id:
@@ -111,14 +113,14 @@ def qdrant_search(
 
     if hasattr(qdrant, "search"):
         hits = qdrant.search(
-            collection_name=QDRANT_COLLECTION,
+            collection_name=collection_name,
             query_vector=query_vector,
             limit=top_k,
             query_filter=qdrant_filter,
         )
     else:
         hits = qdrant.query_points(
-            collection_name=QDRANT_COLLECTION,
+            collection_name=collection_name,
             query=query_vector,
             limit=top_k,
             query_filter=qdrant_filter,
@@ -142,8 +144,10 @@ def qdrant_search_entity_payload(
     query_vector: List[float],
     top_k: int,
     source_id: Optional[str],
+    collection: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     qdrant = get_qdrant()
+    collection_name = collection or QDRANT_COLLECTION
     qdrant_filter = None
     if source_id:
         qdrant_filter = qmodels.Filter(
@@ -157,14 +161,14 @@ def qdrant_search_entity_payload(
 
     if hasattr(qdrant, "search"):
         hits = qdrant.search(
-            collection_name=QDRANT_COLLECTION,
+            collection_name=collection_name,
             query_vector=query_vector,
             limit=top_k,
             query_filter=qdrant_filter,
         )
     else:
         hits = qdrant.query_points(
-            collection_name=QDRANT_COLLECTION,
+            collection_name=collection_name,
             query=query_vector,
             limit=top_k,
             query_filter=qdrant_filter,
@@ -361,6 +365,7 @@ def register_tools(mcp: FastMCP) -> None:
         entity_types: Optional[List[str]] = None,
         max_chunk_chars: Optional[int] = None,
         source_id: Optional[str] = None,
+        collection: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Query Qdrant for top-k chunks, then fetch chunk text and optional entities from Neo4j.
@@ -373,7 +378,11 @@ def register_tools(mcp: FastMCP) -> None:
             doc_id = resolve_doc_id(doc_ref)
 
         payloads = qdrant_search(
-            q_vec, top_k=top_k, doc_id=doc_id, source_id=source_id
+            q_vec,
+            top_k=top_k,
+            doc_id=doc_id,
+            source_id=source_id,
+            collection=collection,
         )
         if source_id and not payloads:
             return {
@@ -423,6 +432,7 @@ def register_tools(mcp: FastMCP) -> None:
         return {
             "top_k": top_k,
             "doc_id": doc_id,
+            "collection": collection or QDRANT_COLLECTION,
             "chunks": chunks,
             "entities": entities,
             "relations": relations,
@@ -459,10 +469,17 @@ def register_tools(mcp: FastMCP) -> None:
             return [dict(r) for r in result]
 
     @mcp.tool()
+    def list_qdrant_collections() -> List[str]:
+        """List Qdrant collections."""
+        qdrant = get_qdrant()
+        return [c.name for c in qdrant.get_collections().collections]
+
+    @mcp.tool()
     def query_graph_rag_langextract(
         query: str,
         top_k: int = 5,
         source_id: Optional[str] = None,
+        collection: Optional[str] = None,
         include_entities: bool = True,
         include_relations: bool = True,
         expand_related: bool = True,
@@ -478,7 +495,7 @@ def register_tools(mcp: FastMCP) -> None:
         q_vec = embedder.encode([query])[0].tolist()
 
         payloads = qdrant_search_entity_payload(
-            q_vec, top_k=top_k, source_id=source_id
+            q_vec, top_k=top_k, source_id=source_id, collection=collection
         )
 
         passages = []
@@ -510,6 +527,7 @@ def register_tools(mcp: FastMCP) -> None:
             "query": query,
             "top_k": top_k,
             "source_id": source_id,
+            "collection": collection or QDRANT_COLLECTION,
             "passages": passages,
             "entities": entities,
             "relations": relations,
