@@ -272,6 +272,7 @@ Ghi chu: neu dung OpenAI voi LangExtract, can cai them `langextract[openai]`.
 - `list_docs(limit)`
 - `query_graph_rag_langextract(query, top_k, source_id, collection, include_entities, include_relations, expand_related, related_k, entity_types, max_passage_chars)`
 - `list_qdrant_collections()`
+- `query_graph_rag_auto(query, top_k, collection, prefer, doc_id, doc_ref, source_id, include_entities, include_relations, expand_related, related_scope, related_k, entity_types, max_chunk_chars, max_passage_chars)`
 
 Note: `query_graph_rag_langextract` su dung payload `entity_ids` tu Qdrant (tu ingest bang `graphrag_ingest_langextract.py`).
 
@@ -281,6 +282,8 @@ Goi mau:
 query_graph_rag(query="Digital Key encryption info", top_k=3, include_entities=true, include_relations=true, entity_types=["ORG"], related_scope="same-doc", related_k=3)
 query_graph_rag_langextract(query="Digital Key encryption info", top_k=5, source_id="my_doc", include_entities=true, include_relations=true, related_k=50, max_passage_chars=800)
 list_qdrant_collections()
+query_graph_rag_auto(query="Digital Key encryption info", top_k=5, collection="graphrag_entities", source_id="my_doc")
+query_graph_rag_auto(query="Digital Key encryption info", top_k=5, collection="graphrag_entities", prefer="langextract", source_id="my_doc")
 ```
 
 ### So sanh MCP tools

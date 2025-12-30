@@ -190,6 +190,26 @@ def qdrant_search_entity_payload(
     return payloads
 
 
+def _detect_collection_mode(collection: str) -> str:
+    qdrant = get_qdrant()
+    try:
+        points, _ = qdrant.scroll(
+            collection_name=collection,
+            limit=1,
+            with_payload=True,
+        )
+    except Exception:
+        return "unknown"
+    if not points:
+        return "empty"
+    payload = getattr(points[0], "payload", None) or {}
+    if "entity_ids" in payload:
+        return "langextract"
+    if "chunk_id" in payload or "doc_id" in payload:
+        return "legacy"
+    return "unknown"
+
+
 def fetch_chunks_by_pairs(pairs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     if not pairs:
         return []
@@ -531,6 +551,89 @@ def register_tools(mcp: FastMCP) -> None:
             "passages": passages,
             "entities": entities,
             "relations": relations,
+        }
+
+    @mcp.tool()
+    def query_graph_rag_auto(
+        query: str,
+        top_k: int = 5,
+        collection: Optional[str] = None,
+        prefer: Optional[str] = None,
+        doc_id: Optional[str] = None,
+        doc_ref: Optional[str] = None,
+        source_id: Optional[str] = None,
+        include_entities: bool = True,
+        include_relations: bool = True,
+        expand_related: bool = True,
+        related_scope: str = "same-doc",
+        related_k: int = 50,
+        entity_types: Optional[List[str]] = None,
+        max_chunk_chars: Optional[int] = None,
+        max_passage_chars: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Auto route to query_graph_rag or query_graph_rag_langextract based on Qdrant payload.
+        Returns context only (no LLM generation).
+        """
+        collection_name = collection or QDRANT_COLLECTION
+        prefer = (prefer or "").strip().lower()
+        if prefer in {"langextract", "legacy"}:
+            mode = prefer
+        elif prefer:
+            return {
+                "query": query,
+                "top_k": top_k,
+                "collection": collection_name,
+                "selected_tool": None,
+                "warning": (
+                    "Invalid prefer value. Use 'langextract' or 'legacy'. "
+                    "Falling back to auto-detect is disabled when prefer is set."
+                ),
+            }
+        else:
+            mode = _detect_collection_mode(collection_name)
+        if mode == "langextract":
+            result = query_graph_rag_langextract(
+                query=query,
+                top_k=top_k,
+                source_id=source_id,
+                collection=collection_name,
+                include_entities=include_entities,
+                include_relations=include_relations,
+                expand_related=expand_related,
+                related_k=related_k,
+                entity_types=entity_types,
+                max_passage_chars=max_passage_chars,
+            )
+            result["selected_tool"] = "query_graph_rag_langextract"
+            return result
+        if mode == "legacy":
+            result = query_graph_rag(
+                query=query,
+                top_k=top_k,
+                doc_id=doc_id,
+                doc_ref=doc_ref,
+                include_entities=include_entities,
+                include_relations=include_relations,
+                expand_related=expand_related,
+                related_scope=related_scope,
+                related_k=related_k,
+                entity_types=entity_types,
+                max_chunk_chars=max_chunk_chars,
+                source_id=source_id,
+                collection=collection_name,
+            )
+            result["selected_tool"] = "query_graph_rag"
+            return result
+        return {
+            "query": query,
+            "top_k": top_k,
+            "collection": collection_name,
+            "selected_tool": None,
+            "warning": (
+                "Unable to infer collection mode. "
+                "Use query_graph_rag or query_graph_rag_langextract explicitly."
+            ),
         }
 
 
