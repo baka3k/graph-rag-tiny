@@ -149,10 +149,15 @@ def ingest_to_neo4j(
         if paragraph_text:
             session.run(
                 """
+                MERGE (d:Document {id: $doc_id})
+                SET d.name = $doc_name
                 MERGE (p:Paragraph {source_id: $source_id, paragraph_id: $paragraph_id})
                 SET p.text = $text,
                     p.short = $is_short
+                MERGE (d)-[:HAS_PARAGRAPH]->(p)
                 """,
+                doc_id=source_id,
+                doc_name=source_id,
                 source_id=source_id,
                 paragraph_id=paragraph_id,
                 text=paragraph_text,

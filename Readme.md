@@ -286,6 +286,24 @@ query_graph_rag_auto(query="Digital Key encryption info", top_k=5, collection="g
 query_graph_rag_auto(query="Digital Key encryption info", top_k=5, collection="graphrag_entities", prefer="langextract", source_id="my_doc")
 ```
 
+Vi du MCP chi tiet:
+
+```
+list_qdrant_collections()
+```
+
+```
+query_graph_rag(query="Digital Key encryption info", top_k=3, doc_id="MY_DOC_ID", include_entities=true, include_relations=true, related_scope="same-doc", related_k=3)
+```
+
+```
+query_graph_rag_langextract(query="Digital Key encryption info", top_k=5, collection="graphrag_entities", source_id="my_doc", include_entities=true, include_relations=true, related_k=50, max_passage_chars=800)
+```
+
+```
+query_graph_rag_auto(query="Digital Key encryption info", top_k=5, collection="graphrag_entities", source_id="my_doc")
+```
+
 ### So sanh MCP tools
 
 | Tieu chi | `query_graph_rag` | `query_graph_rag_langextract` |
