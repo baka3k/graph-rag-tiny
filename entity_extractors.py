@@ -604,12 +604,18 @@ def extract_entities_langextract(text: str) -> Tuple[List[Dict[str, str]], List[
         )
 
     max_attempts, backoff_seconds = _get_retry_settings()
+    retry_plan: list[tuple[bool | None, bool | None]] = [
+        (fence_output, use_schema_constraints),
+        (True, True),
+        (True, False),
+    ]
+    while len(retry_plan) < max_attempts:
+        retry_plan.append((True, False))
+
     for attempt in range(1, max_attempts + 1):
         try:
-            if attempt == 1:
-                result = _run_langextract(fence_output, use_schema_constraints)
-            else:
-                result = _run_langextract(True, True)
+            fence, schema_constraints = retry_plan[attempt - 1]
+            result = _run_langextract(fence, schema_constraints)
             break
         except Exception as exc:
             logging.exception("LangExtract attempt %s failed", attempt)
