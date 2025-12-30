@@ -87,18 +87,27 @@ def qdrant_search(
     query_vector: List[float],
     top_k: int,
     doc_id: Optional[str],
+    source_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     qdrant = get_qdrant()
     qdrant_filter = None
+    must = []
     if doc_id:
-        qdrant_filter = qmodels.Filter(
-            must=[
-                qmodels.FieldCondition(
-                    key="doc_id",
-                    match=qmodels.MatchValue(value=doc_id),
-                )
-            ]
+        must.append(
+            qmodels.FieldCondition(
+                key="doc_id",
+                match=qmodels.MatchValue(value=doc_id),
+            )
         )
+    if source_id:
+        must.append(
+            qmodels.FieldCondition(
+                key="source_id",
+                match=qmodels.MatchValue(value=source_id),
+            )
+        )
+    if must:
+        qdrant_filter = qmodels.Filter(must=must)
 
     if hasattr(qdrant, "search"):
         hits = qdrant.search(
@@ -124,6 +133,54 @@ def qdrant_search(
                 "doc_id": h.payload.get("doc_id"),
                 "chunk_id": h.payload.get("chunk_id"),
                 "score": getattr(h, "score", None),
+            }
+        )
+    return payloads
+
+
+def qdrant_search_entity_payload(
+    query_vector: List[float],
+    top_k: int,
+    source_id: Optional[str],
+) -> List[Dict[str, Any]]:
+    qdrant = get_qdrant()
+    qdrant_filter = None
+    if source_id:
+        qdrant_filter = qmodels.Filter(
+            must=[
+                qmodels.FieldCondition(
+                    key="source_id",
+                    match=qmodels.MatchValue(value=source_id),
+                )
+            ]
+        )
+
+    if hasattr(qdrant, "search"):
+        hits = qdrant.search(
+            collection_name=QDRANT_COLLECTION,
+            query_vector=query_vector,
+            limit=top_k,
+            query_filter=qdrant_filter,
+        )
+    else:
+        hits = qdrant.query_points(
+            collection_name=QDRANT_COLLECTION,
+            query=query_vector,
+            limit=top_k,
+            query_filter=qdrant_filter,
+        ).points
+
+    payloads = []
+    for h in hits:
+        if not h.payload:
+            continue
+        payloads.append(
+            {
+                "score": getattr(h, "score", None),
+                "text": h.payload.get("text"),
+                "source_id": h.payload.get("source_id"),
+                "paragraph_id": h.payload.get("paragraph_id"),
+                "entity_ids": h.payload.get("entity_ids") or [],
             }
         )
     return payloads
@@ -199,6 +256,47 @@ def fetch_related_chunks(
             doc_ids=related_doc_ids,
             limit=related_k,
         )
+    return [dict(r) for r in result]
+
+
+def fetch_entities_by_ids(entity_ids: List[str]) -> List[Dict[str, Any]]:
+    if not entity_ids:
+        return []
+    with get_neo4j().session() as session:
+        result = session.run(
+            """
+            MATCH (e:Entity)
+            WHERE e.id IN $ids
+            RETURN e.id AS id, e.name AS name, e.type AS type
+            """,
+            ids=entity_ids,
+        )
+        return [dict(r) for r in result]
+
+
+def fetch_relations_by_entity_ids(
+    entity_ids: List[str],
+    entity_types: Optional[List[str]],
+    related_k: int,
+) -> List[Dict[str, Any]]:
+    if not entity_ids or related_k <= 0:
+        return []
+    entity_types = entity_types or []
+    with get_neo4j().session() as session:
+        result = session.run(
+            """
+            UNWIND $ids AS id
+            MATCH (e:Entity {id: id})-[r:RELATED]-(e2:Entity)
+            WHERE $types = [] OR e.type IN $types OR e2.type IN $types
+            RETURN e.id AS source_id, e.name AS source, e.type AS source_type,
+                   r.type AS relation,
+                   e2.id AS target_id, e2.name AS target, e2.type AS target_type
+            LIMIT $limit
+            """,
+            ids=entity_ids,
+            types=entity_types,
+            limit=related_k,
+        )
         return [dict(r) for r in result]
 
 
@@ -262,6 +360,7 @@ def register_tools(mcp: FastMCP) -> None:
         related_k: int = 3,
         entity_types: Optional[List[str]] = None,
         max_chunk_chars: Optional[int] = None,
+        source_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Query Qdrant for top-k chunks, then fetch chunk text and optional entities from Neo4j.
@@ -273,7 +372,19 @@ def register_tools(mcp: FastMCP) -> None:
         if not doc_id and doc_ref:
             doc_id = resolve_doc_id(doc_ref)
 
-        payloads = qdrant_search(q_vec, top_k=top_k, doc_id=doc_id)
+        payloads = qdrant_search(
+            q_vec, top_k=top_k, doc_id=doc_id, source_id=source_id
+        )
+        if source_id and not payloads:
+            return {
+                "top_k": top_k,
+                "doc_id": doc_id,
+                "chunks": [],
+                "entities": [],
+                "relations": [],
+                "related": [],
+                "warning": "No chunk payloads found for source_id. If using graphrag_ingest_langextract, use query_graph_rag_langextract.",
+            }
         pairs = [{"doc_id": p.get("doc_id"), "chunk_id": p.get("chunk_id")} for p in payloads]
         score_map = {(p.get("doc_id"), p.get("chunk_id")): p.get("score") for p in payloads}
 
@@ -346,6 +457,63 @@ def register_tools(mcp: FastMCP) -> None:
                 limit=limit,
             )
             return [dict(r) for r in result]
+
+    @mcp.tool()
+    def query_graph_rag_langextract(
+        query: str,
+        top_k: int = 5,
+        source_id: Optional[str] = None,
+        include_entities: bool = True,
+        include_relations: bool = True,
+        expand_related: bool = True,
+        related_k: int = 50,
+        entity_types: Optional[List[str]] = None,
+        max_passage_chars: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Query Qdrant for top-k passages with entity_ids payload, then fetch related
+        entity context from Neo4j. Returns context only (no LLM generation).
+        """
+        embedder = get_embedder()
+        q_vec = embedder.encode([query])[0].tolist()
+
+        payloads = qdrant_search_entity_payload(
+            q_vec, top_k=top_k, source_id=source_id
+        )
+
+        passages = []
+        entity_ids: List[str] = []
+        for row in payloads:
+            text = row.get("text") or ""
+            if max_passage_chars:
+                text = text[:max_passage_chars]
+            passages.append(
+                {
+                    "text": text,
+                    "score": row.get("score"),
+                    "source_id": row.get("source_id"),
+                    "paragraph_id": row.get("paragraph_id"),
+                }
+            )
+            entity_ids.extend(row.get("entity_ids") or [])
+
+        entity_ids = list(dict.fromkeys(entity_ids))
+
+        entities = fetch_entities_by_ids(entity_ids) if include_entities else []
+        relations = []
+        if include_relations and expand_related:
+            relations = fetch_relations_by_entity_ids(
+                entity_ids, entity_types, related_k
+            )
+
+        return {
+            "query": query,
+            "top_k": top_k,
+            "source_id": source_id,
+            "passages": passages,
+            "entities": entities,
+            "relations": relations,
+        }
 
 
 if __name__ == "__main__":
