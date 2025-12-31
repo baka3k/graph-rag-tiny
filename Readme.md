@@ -267,10 +267,10 @@ QDRANT_COLLECTION=pdf_chunks
 EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 AZURE_OPENAI_ENDPOINT=https://<your-resource>.openai.azure.com
 AZURE_OPENAI_API_KEY=your_key
-AZURE_OPENAI_API_VERSION=2024-12-01-preview
-AZURE_OPENAI_DEPLOYMENT=o4-mini
+AZURE_OPENAI_API_VERSION=xxx
+AZURE_OPENAI_DEPLOYMENT=xxx
 GEMINI_API_KEY=your_key
-GEMINI_MODEL=gemini-1.5-flash
+GEMINI_MODEL=xxx
 LANGEXTRACT_API_KEY=your_key
 LANGEXTRACT_MODEL_ID=gemini-2.5-flash
 # If using OpenAI with LangExtract:
@@ -363,3 +363,7 @@ Object:
 - `doc_id` defaults to the filename without the `.pdf` extension (file stem).
 - If your query returns no results, try removing `--doc-id` or verify the doc_id exists in Qdrant/Neo4j.
 - The `page` field in `Chunk` exists only if you re-ingest with a newer version.
+
+# Demo  
+<img src="resources/screenshot_1.png" alt="Demo" width="full">
+<img src="resources/screenshot_2.png" alt="Demo" width="full">
