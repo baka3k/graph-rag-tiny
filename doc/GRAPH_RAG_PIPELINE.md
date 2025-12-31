@@ -1,67 +1,67 @@
 # Graph-RAG Minimal Pipeline (PDF -> Top-k Context)
 
-## Muc tieu
-Dựng nhanh pipeline Graph-RAG để test với 1 PDF tiếng Anh, trả về top-k context. Không cần LLM cho trả lời.
+## Goal
+Quickly build a minimal Graph-RAG pipeline to test with a single English PDF and return top-k context. No LLM is required to generate an answer.
 
-## So do pipeline
+## Pipeline overview
 1) Ingest PDF -> text
 2) Chunking (text -> chunks)
 3) Embedding chunks -> vectors
-4) Luu vectors vao Qdrant
-5) Luu nodes/relations vao Neo4j
-6) Query: embed query -> Qdrant top-k -> pull chunk text (va optional graph context) -> output
+4) Store vectors in Qdrant
+5) Store nodes/relations in Neo4j
+6) Query: embed query -> Qdrant top-k -> pull chunk text (and optional graph context) -> output
 
-## Checklist theo tung buoc
+## Step-by-step checklist
 
 ### 0) Prerequisites
-- [ ] Neo4j dang chay (bolt://localhost:7687)
-- [ ] Qdrant dang chay (http://localhost:6333)
+- [ ] Neo4j is running (bolt://localhost:7687)
+- [ ] Qdrant is running (http://localhost:6333)
 - [ ] Python venv + packages (pypdf, sentence-transformers, qdrant-client, neo4j)
-- [ ] Co 1 file PDF de test
+- [ ] Have 1 PDF file to test
 
 ### 1) Ingest PDF
-- [ ] Doc PDF -> text
-- [ ] Giu metadata: doc_id, page, source path
+- [ ] Read PDF -> text
+- [ ] Keep metadata: doc_id, page, source path
 
 ### 2) Chunking
-- [ ] Chia text thanh cac doan 500-1,000 ky tu
-- [ ] Gan chunk_id, page, doc_id
-- [ ] Luu chunk_text raw
+- [ ] Split text into chunks of 500-1,000 characters
+- [ ] Assign chunk_id, page, doc_id
+- [ ] Store raw chunk_text
 
 ### 3) Embedding
-- [ ] Dung sentence-transformers (hoac embedding model khac)
-- [ ] Moi chunk -> 1 vector
+- [ ] Use sentence-transformers (or another embedding model)
+- [ ] Each chunk -> 1 vector
 
 ### 4) Qdrant
-- [ ] Tao collection (size = dim embedding)
+- [ ] Create collection (size = embedding dimension)
 - [ ] Upsert vectors + payload {chunk_id, doc_id, page}
 
 ### 5) Neo4j Graph
-- [ ] Tao node Document {id, name}
-- [ ] Tao node Chunk {id, text, page}
-- [ ] Tao quan he (Document)-[:HAS_CHUNK]->(Chunk)
+- [ ] Create Document node {id, name}
+- [ ] Create Chunk node {id, text, page}
+- [ ] Create relationship (Document)-[:HAS_CHUNK]->(Chunk)
 
-### 6) Entity graph (optional, khong can LLM)
-- [ ] Dung spaCy NER -> entity list
-- [ ] Tao node Entity {name, type}
-- [ ] Tao quan he (Chunk)-[:MENTIONS]->(Entity)
+### 6) Entity graph (optional, no LLM required)
+- [ ] Use spaCy NER -> entity list
+- [ ] Create Entity node {name, type}
+- [ ] Create relationship (Chunk)-[:MENTIONS]->(Entity)
 
 ### 7) Query top-k
 - [ ] Embed query
 - [ ] Qdrant search top-k
-- [ ] Lay chunk text tu Neo4j bang chunk_id
-- [ ] Optional: expand graph 1 hop qua Entity
+- [ ] Fetch chunk text from Neo4j by chunk_id
+- [ ] Optional: expand the graph 1 hop via Entity
 
 ### 8) Output
-- [ ] Tra ve top-k context
-- [ ] (Khong can LLM) neu chi can raw context
+- [ ] Return top-k context
+- [ ] (No LLM required) if you only need raw context
 
-## Khi nao can LLM?
-- Extract entity/relations phuc tap (thay vi NER co san)
-- Sinh cau tra loi / tom tat / reasoning
+## When do you need an LLM?
+- Extract complex entities/relations (instead of basic NER)
+- Generate answers / summaries / reasoning
 
-## Minimal MVP (tap trung nhat)
-- Chi can: PDF -> chunk -> embed -> Qdrant -> top-k
-- Neo4j chi can Document + Chunk
-- Entity graph co the bo qua o vong 1
+## Minimal MVP (most focused)
+- Only need: PDF -> chunk -> embed -> Qdrant -> top-k
+- Neo4j only needs Document + Chunk
+- The entity graph can be skipped in v1
 
