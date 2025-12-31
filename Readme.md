@@ -3,121 +3,123 @@
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 ```
+
 # Run
 ```
 python main.py
 ```
 
-## Cac script
+## Scripts
 
 - `1_ingest_min.py`: PDF -> chunks -> Qdrant + Neo4j
-- `2_entity_graph_spacy.py`: tao Entity + MENTIONS (spaCy)
-- `2_entity_graph.py`: tao Entity + MENTIONS (spacy/azure)
+- `2_entity_graph_spacy.py`: create Entities + MENTIONS (spaCy)
+- `2_entity_graph.py`: create Entities + MENTIONS (spacy/azure)
 - `3_query_topk.py`: query top-k
-- `4_ingest_and_entities.py`: ingest + entity trong 1 lenh
-- `5_ingest_folder.py`: xu ly tat ca PDF trong folder
+- `4_ingest_and_entities.py`: ingest + entities in one command
+- `5_ingest_folder.py`: process all PDFs in a folder
 - `0_reset_data.py`: reset data
 - `mcp_graph_rag.py`: MCP server (HTTP)
-- `graphrag_ingest_langextract.py`: ingest GraphRAG (LangExtract) -> Neo4j + Qdrant (payload co entity_ids)
-- `graphrag_query_langextract.py`: query GraphRAG (Qdrant + Neo4j) + generate answer
+- `graphrag_ingest_langextract.py`: GraphRAG ingest (LangExtract) -> Neo4j + Qdrant (payload includes entity_ids)
+- `graphrag_query_langextract.py`: GraphRAG query (Qdrant + Neo4j) + generate answer
 
 ## Quick start
 
-### 1) Ingest + Entity (1 file)
+### 1) Ingest + Entity (single file)
 
 ```bash
 python 4_ingest_and_entities.py --pdf /path/to/file.pdf --neo4j-pass abcd1234
 ```
 
-- Dung Azure OpenAI (entity + relations):
+- Use Azure OpenAI (entities + relations):
 ```bash
 python 4_ingest_and_entities.py --pdf /path/to/file.pdf --entity-provider azure --neo4j-pass abcd1234
 ```
 
-- Dung Gemini (entity + relations):
+- Use Gemini (entities + relations):
 ```bash
 python 4_ingest_and_entities.py --pdf /path/to/file.pdf --entity-provider gemini --neo4j-pass abcd1234
 ```
 
-- Dung LangExtract (entity + relations):
+- Use LangExtract (entities + relations):
 ```bash
 python 4_ingest_and_entities.py --pdf /path/to/file.pdf --entity-provider langextract --neo4j-pass abcd1234
 ```
 
-- Dung spaCy + EntityRuler (bo sung entity):
+- Use spaCy + EntityRuler (additional entities):
 ```bash
 python 4_ingest_and_entities.py --pdf /path/to/file.pdf --entity-provider spacy --ruler-json /path/to/rules --neo4j-pass abcd1234
 ```
 
 ### 2) Query
 
-- Khong can doc_id:
+- No doc_id required:
 
 ```bash
 python 3_query_topk.py --query "Digital Key encryption info" --top-k 3 --neo4j-pass abcd1234
 ```
 
-- Co entity:
+- With entities:
 
 ```bash
 python 3_query_topk.py --query "Digital Key encryption info" --top-k 3 --neo4j-pass abcd1234 --with-entities
 ```
 
-- Theo doc_id cu the:
+- Filter by a specific doc_id:
 
 ```bash
 python 3_query_topk.py --query "Digital Key encryption info" --top-k 3 --doc-id MY_DOC_ID --neo4j-pass abcd1234
 ```
 
-### 3) Ingest nhieu PDF trong folder
+### 3) Ingest many PDFs in a folder
 
 ```bash
 python 5_ingest_folder.py --folder /path/to/pdf_folder --neo4j-pass abcd1234
 ```
 
-- Dung Azure OpenAI (entity + relations):
+- Use Azure OpenAI (entities + relations):
 ```bash
 python 5_ingest_folder.py --folder /path/to/pdf_folder --entity-provider azure --neo4j-pass abcd1234
 ```
 
-- Dung Gemini (entity + relations):
+- Use Gemini (entities + relations):
 ```bash
 python 5_ingest_folder.py --folder /path/to/pdf_folder --entity-provider gemini --neo4j-pass abcd1234
 ```
 
-- Dung LangExtract (entity + relations):
+- Use LangExtract (entities + relations):
 ```bash
 python 5_ingest_folder.py --folder /path/to/pdf_folder --entity-provider langextract --neo4j-pass abcd1234
 ```
 
-- Dung spaCy + EntityRuler:
+- Use spaCy + EntityRuler:
 ```bash
 python 5_ingest_folder.py --folder /path/to/pdf_folder --entity-provider spacy --ruler-json /path/to/rules --neo4j-pass abcd1234
 ```
 
-### 4) Reset nhanh
+### 4) Quick reset
 
-- Xoa theo doc_id:
+- Delete by doc_id:
 
 ```bash
 python 0_reset_data.py --doc-id MY_DOC_ID --neo4j-pass abcd1234
 ```
 
-- Xoa toan bo:
+- Delete everything:
 
 ```bash
 python 0_reset_data.py --neo4j-pass abcd1234
 ```
 
-## GraphRAG (2 script moi)
+## GraphRAG (2 new scripts)
 
-### 1) Ingest -> Neo4j + Qdrant (payload co entity_ids)
+### 1) Ingest -> Neo4j + Qdrant (payload includes entity_ids)
 ```
 python graphrag_ingest_langextract.py --folder testdata --entity-provider langextract --langextract-model-id gemma2:2b --langextract-model-url http://localhost:11434 --neo4j-pass abcd1234 --min-paragraph-chars 150 --skip-llm-short   
 
 python graphrag_ingest_langextract.py --folder testdata --entity-provider langextract --langextract-model-id gemma2:2b --langextract-model-url http://localhost:11434 --neo4j-uri bolt://localhost:7687 --neo4j-user neo4j --neo4j-pass abcd1234 --qdrant-host localhost --qdrant-port 6333 --collection graphrag_entities --embedding-model sentence- transformers/all-MiniLM-L6-v2 --min-paragraph-chars 150 --max-paragraph-chars 1200 --llm-debug --llm-retry-count 3--llm-retry-backoff 2 --skip-llm-short
 ```
-Chon 1 trong 4 input:
+
+Choose 1 of 4 inputs:
 
 PDF:
 ```bash
@@ -134,74 +136,74 @@ Raw text:
 python graphrag_ingest_langextract.py --raw-text "Alice works at Acme." --entity-provider spacy
 ```
 
-Folder (de quy):
+Folder (recursive):
 ```bash
 python graphrag_ingest_langextract.py --folder /path/to/folder --entity-provider langextract
 ```
 
-Ho tro file: `.pdf`, `.txt`, `.md`, `.docx`, `.pptx`.
+Supported files: `.pdf`, `.txt`, `.md`, `.docx`, `.pptx`.
 
-Tuy chon cho spaCy:
+spaCy options:
 ```bash
 python graphrag_ingest_langextract.py --pdf /path/to/file.pdf --entity-provider spacy --spacy-model en_core_web_sm --ruler-json /path/to/rules
 ```
 
-Tuy chon LangExtract (Ollama):
+LangExtract options (Ollama):
 ```bash
 python graphrag_ingest_langextract.py --pdf /path/to/file.pdf --entity-provider langextract --langextract-model-id gemma2:2b --langextract-model-url http://localhost:11434
 ```
 
-Tuy chon Qdrant/Neo4j/Embedding:
+Qdrant/Neo4j/Embedding options:
 ```bash
 python graphrag_ingest_langextract.py --pdf /path/to/file.pdf --collection graphrag_entities --embedding-model sentence-transformers/all-MiniLM-L6-v2 --neo4j-uri bolt://localhost:7687 --neo4j-user neo4j --neo4j-pass abcd1234 --qdrant-host localhost --qdrant-port 6333
 ```
 
-Lenh day du (folder + Ollama + Neo4j/Qdrant + retry/log):
+Full command (folder + Ollama + Neo4j/Qdrant + retry/log):
 ```bash
 python graphrag_ingest_langextract.py --folder testdata --entity-provider langextract --langextract-model-id gemma2:2b --langextract-model-url http://localhost:11434 --neo4j-uri bolt://localhost:7687 --neo4j-user neo4j --neo4j-pass abcd1234 --qdrant-host localhost --qdrant-port 6333 --collection graphrag_entities --embedding-model sentence-transformers/all-MiniLM-L6-v2 --min-paragraph-chars 150 --max-paragraph-chars 1200 --llm-debug --llm-retry-count 3 --llm-retry-backoff 2
 ```
 
-Bat log output LLM:
+Enable LLM debug logging:
 ```bash
 python graphrag_ingest_langextract.py --pdf /path/to/file.pdf --entity-provider langextract --llm-debug
 ```
-Log raw output se duoc luu o `logs/langextract_raw.log` (co the override bang env `LLM_DEBUG_LOG_PATH`).
+Raw output is saved to `logs/langextract_raw.log` (can be overridden via env `LLM_DEBUG_LOG_PATH`).
 
-Tuy chon retry/backoff khi parse loi:
+Retry/backoff options when parsing fails:
 ```bash
 python graphrag_ingest_langextract.py --pdf /path/to/file.pdf --entity-provider langextract --llm-retry-count 3 --llm-retry-backoff 2
 ```
 
-Bo qua paragraph qua ngan:
+Skip paragraphs that are too short:
 ```bash
 python graphrag_ingest_langextract.py --pdf /path/to/file.pdf --min-paragraph-chars 150
 ```
 
-Bo qua LLM cho paragraph ngan (van luu Qdrant):
+Skip the LLM for short paragraphs (still store in Qdrant):
 ```bash
 python graphrag_ingest_langextract.py --pdf /path/to/file.pdf --min-paragraph-chars 150 --skip-llm-short
 ```
-Neu bat `--skip-llm-short`, doan ngan se duoc luu vao Neo4j label `Paragraph` (short=true).
-Doan dai se luu `Paragraph` va lien ket `(:Paragraph)-[:HAS_ENTITY]->(:Entity)`.
+If `--skip-llm-short` is enabled, short paragraphs are stored in Neo4j with label `Paragraph` (short=true).
+Long paragraphs are stored as `Paragraph` and linked as `(:Paragraph)-[:HAS_ENTITY]->(:Entity)`.
 
 ### 2) Query + Generate
 
-Co ban:
+Basic:
 ```bash
 python graphrag_query_langextract.py --query "How is Alice related to Acme?" --llm-model gemini-2.5-flash
 ```
 
-Tuy chon Qdrant/Neo4j/Embedding:
+Qdrant/Neo4j/Embedding options:
 ```bash
 python graphrag_query_langextract.py --query "How is Alice related to Acme?" --collection graphrag_entities --top-k 5 --embedding-model sentence-transformers/all-MiniLM-L6-v2 --neo4j-uri bolt://localhost:7687 --neo4j-user neo4j --neo4j-pass abcd1234 --qdrant-host localhost --qdrant-port 6333
 ```
 
-Generate bang Ollama:
+Generate with Ollama:
 ```bash
 python graphrag_query_langextract.py --query "How is Alice related to Acme?" --llm-model gemma2:2b --langextract-model-url http://localhost:11434
 ```
 
-### Env goi y (LangExtract/Gemini/OpenAI/Ollama)
+### Suggested env (LangExtract/Gemini/OpenAI/Ollama)
 
 ```
 NEO4J_URI=bolt://localhost:7687
@@ -215,18 +217,18 @@ QDRANT_KEY=your_qdrant_api_key
 LANGEXTRACT_API_KEY=your_key
 LANGEXTRACT_MODEL_ID=gemini-2.5-flash
 
-# Neu dung LangExtract + Ollama:
+# If using LangExtract + Ollama:
 # LANGEXTRACT_MODEL_ID=gemma2:2b
 # LANGEXTRACT_MODEL_URL=http://localhost:11434
 
-# Neu dung OpenAI:
+# If using OpenAI:
 # LANGEXTRACT_MODEL_ID=gpt-4o
 # OPENAI_API_KEY=your_key
 ```
 
 ## MCP server (HTTP)
 
-### Chay server
+### Run server
 
 ```bash
 python mcp_graph_rag.py --transport streamable-http
@@ -238,9 +240,9 @@ Endpoint:
 http://127.0.0.1:8789/mcp
 ```
 
-### .env (tu dong load)
+### .env (auto-loaded)
 
-Tao file `.env` o root de luu thong tin:
+Create a `.env` file at the repo root to store settings:
 
 ```
 NEO4J_URI=bolt://localhost:7687
@@ -258,13 +260,13 @@ GEMINI_API_KEY=your_key
 GEMINI_MODEL=gemini-1.5-flash
 LANGEXTRACT_API_KEY=your_key
 LANGEXTRACT_MODEL_ID=gemini-2.5-flash
-# Neu dung OpenAI voi LangExtract:
+# If using OpenAI with LangExtract:
 # LANGEXTRACT_MODEL_ID=gpt-4o
 # LANGEXTRACT_USE_SCHEMA_CONSTRAINTS=false
 # LANGEXTRACT_FENCE_OUTPUT=true
 ```
 
-Ghi chu: neu dung OpenAI voi LangExtract, can cai them `langextract[openai]`.
+Note: if you use OpenAI with LangExtract, install `langextract[openai]`.
 
 ### MCP tools
 
@@ -274,9 +276,9 @@ Ghi chu: neu dung OpenAI voi LangExtract, can cai them `langextract[openai]`.
 - `list_qdrant_collections()`
 - `query_graph_rag_auto(query, top_k, collection, prefer, doc_id, doc_ref, source_id, include_entities, include_relations, expand_related, related_scope, related_k, entity_types, max_chunk_chars, max_passage_chars)`
 
-Note: `query_graph_rag_langextract` su dung payload `entity_ids` tu Qdrant (tu ingest bang `graphrag_ingest_langextract.py`).
+Note: `query_graph_rag_langextract` uses the `entity_ids` payload from Qdrant (ingested via `graphrag_ingest_langextract.py`).
 
-Goi mau:
+Sample calls:
 
 ```
 query_graph_rag(query="Digital Key encryption info", top_k=3, include_entities=true, include_relations=true, entity_types=["ORG"], related_scope="same-doc", related_k=3)
@@ -286,7 +288,7 @@ query_graph_rag_auto(query="Digital Key encryption info", top_k=5, collection="g
 query_graph_rag_auto(query="Digital Key encryption info", top_k=5, collection="graphrag_entities", prefer="langextract", source_id="my_doc")
 ```
 
-Vi du MCP chi tiet:
+Detailed MCP examples:
 
 ```
 list_qdrant_collections()
@@ -304,21 +306,21 @@ query_graph_rag_langextract(query="Digital Key encryption info", top_k=5, collec
 query_graph_rag_auto(query="Digital Key encryption info", top_k=5, collection="graphrag_entities", source_id="my_doc")
 ```
 
-### So sanh MCP tools
+### MCP tools comparison
 
-| Tieu chi | `query_graph_rag` | `query_graph_rag_langextract` |
+| Criteria | `query_graph_rag` | `query_graph_rag_langextract` |
 | --- | --- | --- |
-| Payload Qdrant | `doc_id`, `chunk_id` | `entity_ids`, `paragraph_id`, `source_id` |
-| Ingest tuong ung | `1_ingest_min.py`, `4_ingest_and_entities.py` | `graphrag_ingest_langextract.py` |
-| Doan text tra ve | Chunk theo `Chunk` (Neo4j) | Passage tu payload Qdrant |
-| Entity/Relation | Lay qua `MENTIONS` + `RELATED` (Neo4j) | Lay qua `Entity` + `RELATED` theo `entity_ids` |
-| Filter | `doc_id` (va `source_id` neu payload co) | `source_id` |
-| Diem manh | Don gian, nhanh cho pipeline cu | Phu hop GraphRAG moi, payload tu LLM extract, linh hoat |
-| Diem yeu | Khong dung duoc payload `entity_ids` | Yeu cau ingest bang script moi |
-| Use case | PDF->Chunk->Neo4j/Qdrant co doc_id/chunk_id | GraphRAG entity payload + paragraph_id |
+| Qdrant payload | `doc_id`, `chunk_id` | `entity_ids`, `paragraph_id`, `source_id` |
+| Matching ingest scripts | `1_ingest_min.py`, `4_ingest_and_entities.py` | `graphrag_ingest_langextract.py` |
+| Returned text | Chunk from `Chunk` (Neo4j) | Passage from Qdrant payload |
+| Entity/Relation | Via `MENTIONS` + `RELATED` (Neo4j) | Via `Entity` + `RELATED` based on `entity_ids` |
+| Filter | `doc_id` (and `source_id` if present in payload) | `source_id` |
+| Strengths | Simple and fast for the older pipeline | Fits the newer GraphRAG flow, LLM-extracted payload, flexible |
+| Weaknesses | Cannot use `entity_ids` payload | Requires ingest via the newer script |
+| Use case | PDF->Chunk->Neo4j/Qdrant with doc_id/chunk_id | GraphRAG entity payload + paragraph_id |
 
 ## EntityRuler JSON format
-File JSON co the la list hoac object:
+The JSON file can be a list or an object:
 
 List:
 ```
@@ -343,8 +345,8 @@ Object:
 }
 ```
 
-## Luu y
+## Notes
 
-- `doc_id` mac dinh la ten file khong co duoi `.pdf` (file stem).
-- Neu query khong ra ket qua, thu bo `--doc-id` hoac kiem tra doc_id dang co trong Qdrant/Neo4j.
-- Truong `page` trong `Chunk` chi co neu ingest lai voi phien ban moi.
+- `doc_id` defaults to the filename without the `.pdf` extension (file stem).
+- If your query returns no results, try removing `--doc-id` or verify the doc_id exists in Qdrant/Neo4j.
+- The `page` field in `Chunk` exists only if you re-ingest with a newer version.
