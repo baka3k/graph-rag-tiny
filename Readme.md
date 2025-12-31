@@ -1,3 +1,6 @@
+# Enviroment
+Make sure Neo4j is running and accessible at http://localhost:7474
+Make sure Qdrant is running and accessible at http://localhost:6333
 # Install
 ```
 pip install -r requirements.txt
@@ -6,9 +9,19 @@ python -m spacy download en_core_web_sm
 
 # Run
 ```
-python main.py
+python mcp_graph_rag.py --transport streamable-http
 ```
-
+# mcp config
+```
+{
+  "servers": {
+    "mind_mcp": {
+      "url": "http://127.0.0.1:8789/mcp",
+      "type": "http"
+    }
+  }
+}
+```
 ## Scripts
 
 - `1_ingest_min.py`: PDF -> chunks -> Qdrant + Neo4j
