@@ -20,3 +20,7 @@ dist/
 
 # Local cache/storage (vector db, temporary state)
 storage/
+
+# Allow the resources folder (screenshots, images) to be tracked
+!resources/
+!resources/**
