@@ -94,6 +94,15 @@ def _set_langextract_overrides(model_id: str | None, model_url: str | None) -> N
         os.environ["LANGEXTRACT_MODEL_URL"] = model_url
 
 
+def _normalize_entity_name(name: str) -> str:
+    return re.sub(r"\s+", " ", name.strip().lower())
+
+
+def _entity_id(name: str, ent_type: str) -> str:
+    key = f"{ent_type}::{_normalize_entity_name(name)}"
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, key))
+
+
 def build_graph_components(
     text: str,
     provider: str,
@@ -117,39 +126,7 @@ def build_graph_components(
         entities, relations = extract_entities_gemini(text)
     else:
         entities, relations = extract_entities_langextract(text)
-    nodes: Dict[str, Dict[str, str]] = {}
-    for ent in entities:
-        name = ent.get("name", "").strip()
-        if not name:
-            continue
-        nodes.setdefault(
-            name,
-            {
-                "id": str(uuid.uuid4()),
-                "name": name,
-                "type": ent.get("type", "UNKNOWN") or "UNKNOWN",
-            },
-        )
-
-    cleaned_relations = []
-    for rel in relations:
-        source = rel.get("source", "").strip()
-        target = rel.get("target", "").strip()
-        rel_type = rel.get("relation", "").strip() or "RELATED"
-        if not source or not target:
-            continue
-        if source not in nodes:
-            nodes[source] = {"id": str(uuid.uuid4()), "name": source, "type": "UNKNOWN"}
-        if target not in nodes:
-            nodes[target] = {"id": str(uuid.uuid4()), "name": target, "type": "UNKNOWN"}
-        cleaned_relations.append(
-            {
-                "source_id": nodes[source]["id"],
-                "target_id": nodes[target]["id"],
-                "type": rel_type,
-            }
-        )
-    return nodes, cleaned_relations
+    return build_graph_components_from_entities(entities, relations)
 
 
 def build_graph_components_from_entities(
@@ -157,18 +134,22 @@ def build_graph_components_from_entities(
     relations: List[Dict[str, str]],
 ) -> Tuple[Dict[str, Dict[str, str]], List[Dict[str, str]]]:
     nodes: Dict[str, Dict[str, str]] = {}
+    name_index: Dict[str, str] = {}
     for ent in entities:
         name = ent.get("name", "").strip()
         if not name:
             continue
-        nodes.setdefault(
-            name,
-            {
-                "id": str(uuid.uuid4()),
+        ent_type = ent.get("type", "UNKNOWN") or "UNKNOWN"
+        name_norm = _normalize_entity_name(name)
+        key = f"{ent_type}::{name_norm}"
+        if key not in nodes:
+            nodes[key] = {
+                "id": _entity_id(name, ent_type),
                 "name": name,
-                "type": ent.get("type", "UNKNOWN") or "UNKNOWN",
-            },
-        )
+                "type": ent_type,
+                "name_norm": name_norm,
+            }
+            name_index.setdefault(name_norm, key)
     cleaned_relations = []
     for rel in relations:
         source = rel.get("source", "").strip()
@@ -176,14 +157,32 @@ def build_graph_components_from_entities(
         rel_type = rel.get("relation", "").strip() or "RELATED"
         if not source or not target:
             continue
-        if source not in nodes:
-            nodes[source] = {"id": str(uuid.uuid4()), "name": source, "type": "UNKNOWN"}
-        if target not in nodes:
-            nodes[target] = {"id": str(uuid.uuid4()), "name": target, "type": "UNKNOWN"}
+        source_norm = _normalize_entity_name(source)
+        target_norm = _normalize_entity_name(target)
+        source_key = name_index.get(source_norm)
+        if source_key is None:
+            source_key = f"UNKNOWN::{source_norm}"
+            nodes[source_key] = {
+                "id": _entity_id(source, "UNKNOWN"),
+                "name": source,
+                "type": "UNKNOWN",
+                "name_norm": source_norm,
+            }
+            name_index.setdefault(source_norm, source_key)
+        target_key = name_index.get(target_norm)
+        if target_key is None:
+            target_key = f"UNKNOWN::{target_norm}"
+            nodes[target_key] = {
+                "id": _entity_id(target, "UNKNOWN"),
+                "name": target,
+                "type": "UNKNOWN",
+                "name_norm": target_norm,
+            }
+            name_index.setdefault(target_norm, target_key)
         cleaned_relations.append(
             {
-                "source_id": nodes[source]["id"],
-                "target_id": nodes[target]["id"],
+                "source_id": nodes[source_key]["id"],
+                "target_id": nodes[target_key]["id"],
                 "type": rel_type,
             }
         )
@@ -221,23 +220,23 @@ def ingest_to_neo4j(
             session.run(
                 """
                 MERGE (e:Entity {id: $id})
-                SET e.name = $name,
+                SET e.name = coalesce(e.name, $name),
                     e.type = $type,
-                    e.source_id = $source_id,
-                    e.paragraph_id = $paragraph_id
+                    e.name_norm = $name_norm
                 """,
                 id=node["id"],
                 name=node["name"],
                 type=node["type"],
-                source_id=source_id,
-                paragraph_id=paragraph_id,
+                name_norm=node["name_norm"],
             )
             if paragraph_text:
                 session.run(
                     """
                     MATCH (p:Paragraph {source_id: $source_id, paragraph_id: $paragraph_id})
                     MATCH (e:Entity {id: $id})
-                    MERGE (p)-[:HAS_ENTITY]->(e)
+                    MERGE (p)-[r:HAS_ENTITY]->(e)
+                    SET r.source_id = $source_id,
+                        r.paragraph_id = $paragraph_id
                     """,
                     source_id=source_id,
                     paragraph_id=paragraph_id,
@@ -248,9 +247,7 @@ def ingest_to_neo4j(
                 """
                 MATCH (s:Entity {id: $source_id})
                 MATCH (t:Entity {id: $target_id})
-                MERGE (s)-[r:RELATED {type: $type}]->(t)
-                SET r.source_id = $source_doc,
-                    r.paragraph_id = $paragraph_id
+                MERGE (s)-[r:RELATED {type: $type, source_id: $source_doc, paragraph_id: $paragraph_id}]->(t)
                 """,
                 source_id=rel["source_id"],
                 target_id=rel["target_id"],
@@ -283,6 +280,7 @@ def ingest_to_neo4j_batch(driver, items: List[Dict[str, Any]]) -> None:
                     "id": node["id"],
                     "name": node["name"],
                     "type": node["type"],
+                    "name_norm": node["name_norm"],
                     "source_id": item["source_id"],
                     "paragraph_id": item["paragraph_id"],
                 }
@@ -316,10 +314,9 @@ def ingest_to_neo4j_batch(driver, items: List[Dict[str, Any]]) -> None:
                 """
                 UNWIND $entities AS row
                 MERGE (e:Entity {id: row.id})
-                SET e.name = row.name,
+                SET e.name = coalesce(e.name, row.name),
                     e.type = row.type,
-                    e.source_id = row.source_id,
-                    e.paragraph_id = row.paragraph_id
+                    e.name_norm = row.name_norm
                 """,
                 entities=entities,
             )
@@ -328,7 +325,9 @@ def ingest_to_neo4j_batch(driver, items: List[Dict[str, Any]]) -> None:
                 UNWIND $entities AS row
                 MATCH (p:Paragraph {source_id: row.source_id, paragraph_id: row.paragraph_id})
                 MATCH (e:Entity {id: row.id})
-                MERGE (p)-[:HAS_ENTITY]->(e)
+                MERGE (p)-[r:HAS_ENTITY]->(e)
+                SET r.source_id = row.source_id,
+                    r.paragraph_id = row.paragraph_id
                 """,
                 entities=entities,
             )
@@ -338,9 +337,7 @@ def ingest_to_neo4j_batch(driver, items: List[Dict[str, Any]]) -> None:
                 UNWIND $relations AS row
                 MATCH (s:Entity {id: row.source_id})
                 MATCH (t:Entity {id: row.target_id})
-                MERGE (s)-[r:RELATED {type: row.type}]->(t)
-                SET r.source_id = row.source_doc,
-                    r.paragraph_id = row.paragraph_id
+                MERGE (s)-[r:RELATED {type: row.type, source_id: row.source_doc, paragraph_id: row.paragraph_id}]->(t)
                 """,
                 relations=relations,
             )
@@ -367,7 +364,7 @@ def ingest_to_qdrant(
     nodes: Dict[str, Dict[str, str]],
     source_id: str,
 ) -> None:
-    node_lookup = {name.lower(): node["id"] for name, node in nodes.items()}
+    node_lookup = {node["name"].lower(): node["id"] for node in nodes.values()}
     vector = embedder.encode([paragraph])[0]
     entity_ids = []
     lower_para = paragraph.lower()

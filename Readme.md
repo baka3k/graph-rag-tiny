@@ -117,7 +117,7 @@ This command:
 - Calls LangExtract to extract entities and relations.
 - Stores data in:
   - **Qdrant**: passage + embedding (payload includes `source_id`, `paragraph_id`, `entity_ids`).
-  - **Neo4j**: `Document`, `Paragraph`, `Entity`, and their relationships.
+  - **Neo4j**: `Document`, `Paragraph`, `Entity`, and their relationships (entities merge by normalized name+type).
 
 Result: after ingest, you can call `query_graph_rag_langextract` and use the `entity_ids` bridge to expand context via Neo4j.
 
