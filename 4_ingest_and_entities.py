@@ -20,8 +20,12 @@ from entity_extractors import (
     build_spacy_pipeline,
     extract_entities_azure,
     extract_entities_gemini,
+    extract_entities_gliner,
     extract_entities_langextract,
+    build_gliner_model,
+    parse_gliner_labels,
 )
+from embedding_utils import resolve_embedding_model
 
 
 def read_pdf_pages(pdf_path: Path) -> list[tuple[int, str]]:
@@ -103,10 +107,18 @@ def main() -> None:
     parser.add_argument("--neo4j-pass", default="password")
     parser.add_argument("--spacy-model", default="en_core_web_sm")
     parser.add_argument("--ruler-json", default=None, help="Path to EntityRuler JSON patterns")
+    parser.add_argument("--gliner-model", default="urchade/gliner_mediumv2")
+    parser.add_argument(
+        "--gliner-labels",
+        default="PERSON,ORG,PRODUCT,GPE,DATE,TECH,CRYPTO,STANDARD",
+        help="Comma-separated labels or path to a text file for GLiNER",
+    )
+    parser.add_argument("--gliner-threshold", type=float, default=0.3)
+    parser.add_argument("--embedding-model", default=None)
     parser.add_argument(
         "--entity-provider",
-        choices=["spacy", "azure", "gemini", "langextract"],
-        default="spacy",
+        choices=["spacy", "gliner", "azure", "gemini", "langextract"],
+        default="gliner",
         help="Entity extraction provider",
     )
     args = parser.parse_args()
@@ -128,7 +140,10 @@ def main() -> None:
     pages = read_pdf_pages(pdf_path)
     chunks = chunk_pages(pages, args.chunk_size, args.chunking)
 
-    model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+    model_name, local_files_only = resolve_embedding_model(
+        args.embedding_model, "sentence-transformers/all-MiniLM-L6-v2"
+    )
+    model = SentenceTransformer(model_name, local_files_only=local_files_only)
     vectors = model.encode([c["text"] for c in chunks])
 
     if args.qdrant_url:
@@ -197,6 +212,8 @@ def main() -> None:
 
     if args.entity_provider == "spacy" and args.ruler_json:
         print(f"Extracting entities using provider: spacy + EntityRuler ({args.ruler_json})")
+    elif args.entity_provider == "gliner":
+        print(f"Extracting entities using provider: gliner ({args.gliner_model})")
     else:
         print(f"Extracting entities using provider: {args.entity_provider}")
     with driver.session() as session:
@@ -206,6 +223,9 @@ def main() -> None:
         )
         if args.entity_provider == "spacy":
             nlp = build_spacy_pipeline(args.spacy_model, ruler_json=args.ruler_json)
+        if args.entity_provider == "gliner":
+            gliner_labels = parse_gliner_labels(args.gliner_labels)
+            gliner_model = build_gliner_model(args.gliner_model)
         for record in chunk_rows:
             chunk_id = record["id"]
             chunk_text_value = record["text"] or ""
@@ -214,6 +234,14 @@ def main() -> None:
                 doc = nlp(chunk_text_value)
                 entities = [{"name": ent.text, "type": ent.label_} for ent in doc.ents]
                 relations = []
+            elif args.entity_provider == "gliner":
+                entities, relations = extract_entities_gliner(
+                    chunk_text_value,
+                    labels=gliner_labels,
+                    model=args.gliner_model,
+                    threshold=args.gliner_threshold,
+                    gliner_model=gliner_model,
+                )
             elif args.entity_provider == "azure":
                 entities, relations = extract_entities_azure(chunk_text_value)
             elif args.entity_provider == "gemini":

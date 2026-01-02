@@ -24,3 +24,16 @@ storage/
 # Allow the resources folder (screenshots, images) to be tracked
 !resources/
 !resources/**
+
+.DS_Store
+.env
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.log
+.serena

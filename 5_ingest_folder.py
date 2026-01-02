@@ -30,10 +30,18 @@ def main() -> None:
     parser.add_argument("--neo4j-pass", default="password")
     parser.add_argument("--spacy-model", default="en_core_web_sm")
     parser.add_argument("--ruler-json", default=None, help="Path to EntityRuler JSON patterns")
+    parser.add_argument("--gliner-model", default="urchade/gliner_mediumv2")
+    parser.add_argument(
+        "--gliner-labels",
+        default="PERSON,ORG,PRODUCT,GPE,DATE,TECH,CRYPTO,STANDARD",
+        help="Comma-separated labels or path to a text file for GLiNER",
+    )
+    parser.add_argument("--gliner-threshold", type=float, default=0.3)
+    parser.add_argument("--embedding-model", default=None)
     parser.add_argument(
         "--entity-provider",
-        choices=["spacy", "azure", "gemini", "langextract"],
-        default="spacy",
+        choices=["spacy", "gliner", "azure", "gemini", "langextract"],
+        default="gliner",
         help="Entity extraction provider",
     )
     args = parser.parse_args()
@@ -73,7 +81,15 @@ def main() -> None:
             args.ruler_json or "",
             "--entity-provider",
             args.entity_provider,
+            "--gliner-model",
+            args.gliner_model,
+            "--gliner-labels",
+            args.gliner_labels,
+            "--gliner-threshold",
+            str(args.gliner_threshold),
         ]
+        if args.embedding_model:
+            cmd.extend(["--embedding-model", args.embedding_model])
         if args.qdrant_url:
             cmd.extend(["--qdrant-url", args.qdrant_url])
         else:

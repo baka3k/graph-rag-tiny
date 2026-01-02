@@ -4,6 +4,7 @@ from qdrant_client.http import models as qmodels
 from sentence_transformers import SentenceTransformer
 from neo4j import GraphDatabase
 
+from embedding_utils import resolve_embedding_model
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -17,9 +18,13 @@ def main() -> None:
     parser.add_argument("--neo4j-user", default="neo4j")
     parser.add_argument("--neo4j-pass", default="password")
     parser.add_argument("--with-entities", action="store_true")
+    parser.add_argument("--embedding-model", default=None)
     args = parser.parse_args()
 
-    model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+    model_name, local_files_only = resolve_embedding_model(
+        args.embedding_model, "sentence-transformers/all-MiniLM-L6-v2"
+    )
+    model = SentenceTransformer(model_name, local_files_only=local_files_only)
     q_vec = model.encode([args.query])[0].tolist()
 
     qdrant = QdrantClient(host=args.qdrant_host, port=args.qdrant_port)

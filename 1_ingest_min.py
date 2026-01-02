@@ -10,6 +10,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 from neo4j import GraphDatabase
 
+from embedding_utils import resolve_embedding_model
 
 def read_pdf_pages(pdf_path: Path) -> list[tuple[int, str]]:
     reader = PdfReader(str(pdf_path))
@@ -87,6 +88,7 @@ def main() -> None:
     parser.add_argument("--neo4j-uri", default="bolt://localhost:7687")
     parser.add_argument("--neo4j-user", default="neo4j")
     parser.add_argument("--neo4j-pass", default="password")
+    parser.add_argument("--embedding-model", default=None)
     args = parser.parse_args()
 
     pdf_path = Path(args.pdf)
@@ -101,7 +103,10 @@ def main() -> None:
     pages = read_pdf_pages(pdf_path)
     chunks = chunk_pages(pages, args.chunk_size, args.chunking)
 
-    model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+    model_name, local_files_only = resolve_embedding_model(
+        args.embedding_model, "sentence-transformers/all-MiniLM-L6-v2"
+    )
+    model = SentenceTransformer(model_name, local_files_only=local_files_only)
     vectors = model.encode([c["text"] for c in chunks])
 
     qdrant = QdrantClient(host=args.qdrant_host, port=args.qdrant_port)

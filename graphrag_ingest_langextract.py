@@ -14,6 +14,8 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 from sentence_transformers import SentenceTransformer
 
+from embedding_utils import resolve_embedding_model
+
 try:
     from dotenv import load_dotenv
 except Exception:
@@ -22,7 +24,10 @@ except Exception:
 from entity_extractors import (
     build_spacy_pipeline,
     extract_entities_gemini,
+    extract_entities_gliner,
     extract_entities_langextract,
+    build_gliner_model,
+    parse_gliner_labels,
 )
 
 
@@ -92,11 +97,21 @@ def build_graph_components(
     text: str,
     provider: str,
     nlp=None,
+    gliner_model=None,
+    gliner_labels: List[str] | None = None,
+    gliner_threshold: float = 0.3,
 ) -> Tuple[Dict[str, Dict[str, str]], List[Dict[str, str]]]:
     if provider == "spacy":
         doc = nlp(text)
         entities = [{"name": ent.text, "type": ent.label_} for ent in doc.ents]
         relations = []
+    elif provider == "gliner":
+        entities, relations = extract_entities_gliner(
+            text,
+            labels=gliner_labels,
+            threshold=gliner_threshold,
+            gliner_model=gliner_model,
+        )
     elif provider == "gemini":
         entities, relations = extract_entities_gemini(text)
     else:
@@ -279,6 +294,7 @@ def process_text(
     qdrant: QdrantClient,
     embedder: SentenceTransformer,
     nlp=None,
+    gliner_model=None,
 ) -> None:
     if not raw_text:
         print(f"Skip empty input: {source_id}")
@@ -290,6 +306,9 @@ def process_text(
 
     if args.entity_provider == "spacy" and nlp is None:
         nlp = build_spacy_pipeline(args.spacy_model, ruler_json=args.ruler_json)
+    if args.entity_provider == "gliner" and gliner_model is None:
+        gliner_model = build_gliner_model(args.gliner_model_resolved)
+    gliner_labels = parse_gliner_labels(args.gliner_labels)
 
     paragraphs = split_paragraphs(raw_text, args.max_paragraph_chars)
     print(f"Chunked into {len(paragraphs)} paragraphs.")
@@ -319,7 +338,14 @@ def process_text(
                 print(f"Paragraph {idx + 1}/{len(paragraphs)}: skipped (len={len(paragraph)})")
             continue
         print(f"Paragraph {idx + 1}/{len(paragraphs)}: extracting entities/relations...")
-        nodes, relations = build_graph_components(paragraph, args.entity_provider, nlp=nlp)
+        nodes, relations = build_graph_components(
+            paragraph,
+            args.entity_provider,
+            nlp=nlp,
+            gliner_model=gliner_model,
+            gliner_labels=gliner_labels,
+            gliner_threshold=args.gliner_threshold,
+        )
         print(f"Extracted {len(nodes)} entities, {len(relations)} relations.")
 
         print("Ingesting to Neo4j...")
@@ -346,7 +372,7 @@ def main() -> None:
     parser.add_argument("--folder", help="Folder to scan for .pdf/.txt files (recursive)")
     parser.add_argument("--source-id", default=None, help="Custom source identifier")
     parser.add_argument("--collection", default="graphrag_entities")
-    parser.add_argument("--embedding-model", default="sentence-transformers/all-MiniLM-L6-v2")
+    parser.add_argument("--embedding-model", default=None)
     parser.add_argument("--max-paragraph-chars", type=int, default=1200)
     parser.add_argument("--min-paragraph-chars", type=int, default=150)
     parser.add_argument(
@@ -356,12 +382,33 @@ def main() -> None:
     )
     parser.add_argument(
         "--entity-provider",
-        choices=["spacy", "gemini", "langextract"],
-        default="langextract",
+        choices=["spacy", "gliner", "gemini", "langextract"],
+        default="gliner",
         help="Entity extraction provider",
     )
     parser.add_argument("--spacy-model", default="en_core_web_sm")
     parser.add_argument("--ruler-json", default=None, help="Path to EntityRuler JSON patterns")
+    parser.add_argument(
+        "--gliner-model-name",
+        default=os.getenv("GLINER_MODEL_NAME", "urchade/gliner_mediumv2"),
+        help="GLiNER model name (HuggingFace).",
+    )
+    parser.add_argument(
+        "--gliner-model-path",
+        default=os.getenv("GLINER_MODEL_PATH"),
+        help="Local path to a GLiNER model directory.",
+    )
+    parser.add_argument(
+        "--gliner-model",
+        default=None,
+        help="Deprecated: use --gliner-model-name or --gliner-model-path.",
+    )
+    parser.add_argument(
+        "--gliner-labels",
+        default="PERSON,ORG,PRODUCT,GPE,DATE,TECH,CRYPTO,STANDARD",
+        help="Comma-separated labels or path to a text file for GLiNER",
+    )
+    parser.add_argument("--gliner-threshold", type=float, default=0.3)
     parser.add_argument("--langextract-model-id", default=os.getenv("LANGEXTRACT_MODEL_ID"))
     parser.add_argument("--langextract-model-url", default=os.getenv("LANGEXTRACT_MODEL_URL"))
     parser.add_argument("--llm-debug", action="store_true", help="Print raw LLM output")
@@ -378,6 +425,14 @@ def main() -> None:
 
     _load_env()
 
+    if args.gliner_model_path:
+        gliner_model_choice = args.gliner_model_path
+    elif args.gliner_model:
+        gliner_model_choice = args.gliner_model
+    else:
+        gliner_model_choice = args.gliner_model_name
+    args.gliner_model_resolved = gliner_model_choice
+
     inputs = [bool(args.pdf), bool(args.text_file), bool(args.raw_text), bool(args.folder)]
     if sum(inputs) != 1:
         raise SystemExit("Provide exactly one of --pdf, --text-file, --raw-text, or --folder.")
@@ -390,7 +445,10 @@ def main() -> None:
     if args.llm_retry_backoff is not None:
         os.environ["LLM_RETRY_BACKOFF_SECONDS"] = str(args.llm_retry_backoff)
     _set_langextract_overrides(args.langextract_model_id, args.langextract_model_url)
-    embedder = SentenceTransformer(args.embedding_model)
+    model_name, local_files_only = resolve_embedding_model(
+        args.embedding_model, "sentence-transformers/all-MiniLM-L6-v2"
+    )
+    embedder = SentenceTransformer(model_name, local_files_only=local_files_only)
 
     if args.qdrant_url:
         qdrant = QdrantClient(url=args.qdrant_url, api_key=args.qdrant_api_key)
@@ -411,8 +469,11 @@ def main() -> None:
             raise SystemExit("No supported files found in folder.")
         print(f"Found {len(file_paths)} files in folder.")
         shared_nlp = None
+        shared_gliner = None
         if args.entity_provider == "spacy":
             shared_nlp = build_spacy_pipeline(args.spacy_model, ruler_json=args.ruler_json)
+        if args.entity_provider == "gliner":
+            shared_gliner = build_gliner_model(args.gliner_model_resolved)
         for idx, file_path in enumerate(file_paths, start=1):
             print(f"[{idx}/{len(file_paths)}] Processing: {file_path}")
             if args.source_id:
@@ -420,7 +481,16 @@ def main() -> None:
             else:
                 source_id = _safe_source_id(folder_path, file_path)
             raw_text = _read_input_text(file_path)
-            process_text(raw_text, source_id, args, driver, qdrant, embedder, nlp=shared_nlp)
+            process_text(
+                raw_text,
+                source_id,
+                args,
+                driver,
+                qdrant,
+                embedder,
+                nlp=shared_nlp,
+                gliner_model=shared_gliner,
+            )
         return
 
     if args.pdf:

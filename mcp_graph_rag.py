@@ -11,6 +11,8 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 from sentence_transformers import SentenceTransformer
 
+from embedding_utils import resolve_embedding_model
+
 
 MCP_NAME = "graph_rag"
 
@@ -33,9 +35,33 @@ QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "pdf_chunks")
 
-EMBEDDING_MODEL = os.getenv(
-    "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
-)
+DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+DEFAULT_ENTITY_TYPES = [
+    "ORG",
+    "PRODUCT",
+    "STANDARD",
+    "TECH",
+    "CRYPTO",
+    "SECURITY",
+    "PROTOCOL",
+    "VEHICLE",
+    "DEVICE",
+    "SERVER",
+    "APP",
+    "CERTIFICATE",
+    "KEY",
+]
+
+
+def _parse_entity_types(raw: Optional[str]) -> List[str]:
+    if not raw:
+        return []
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+ENTITY_TYPES_DEFAULT = _parse_entity_types(
+    os.getenv("DEFAULT_ENTITY_TYPES") or os.getenv("ENTITY_TYPES_DEFAULT")
+) or DEFAULT_ENTITY_TYPES
 
 
 _qdrant_client: Optional[QdrantClient] = None
@@ -57,7 +83,8 @@ def get_qdrant() -> QdrantClient:
 def get_embedder() -> SentenceTransformer:
     global _embedder
     if _embedder is None:
-        _embedder = SentenceTransformer(EMBEDDING_MODEL)
+        model_name, local_files_only = resolve_embedding_model(None, DEFAULT_EMBEDDING_MODEL)
+        _embedder = SentenceTransformer(model_name, local_files_only=local_files_only)
     return _embedder
 
 
@@ -280,7 +307,7 @@ def fetch_related_chunks(
             doc_ids=related_doc_ids,
             limit=related_k,
         )
-    return [dict(r) for r in result]
+        return [dict(r) for r in result]
 
 
 def fetch_entities_by_ids(entity_ids: List[str]) -> List[Dict[str, Any]]:
@@ -371,7 +398,8 @@ def resolve_doc_id(doc_ref: str) -> Optional[str]:
 
 
 def register_tools(mcp: FastMCP) -> None:
-    @mcp.tool()
+    enable_legacy = os.getenv("FASTMCP_ENABLE_LEGACY", "").strip().lower() in {"1", "true", "yes"}
+
     def query_graph_rag(
         query: str,
         top_k: int = 3,
@@ -397,6 +425,9 @@ def register_tools(mcp: FastMCP) -> None:
         if not doc_id and doc_ref:
             doc_id = resolve_doc_id(doc_ref)
 
+        if entity_types is None:
+            entity_types = list(ENTITY_TYPES_DEFAULT)
+
         payloads = qdrant_search(
             q_vec,
             top_k=top_k,
@@ -414,7 +445,10 @@ def register_tools(mcp: FastMCP) -> None:
                 "related": [],
                 "warning": "No chunk payloads found for source_id. If using graphrag_ingest_langextract, use query_graph_rag_langextract.",
             }
-        pairs = [{"doc_id": p.get("doc_id"), "chunk_id": p.get("chunk_id")} for p in payloads]
+        pairs = [
+            {"doc_id": p.get("doc_id"), "chunk_id": p.get("chunk_id")} for p in payloads
+        ]
+        pairs = list({(p["doc_id"], p["chunk_id"]): p for p in pairs}.values())
         score_map = {(p.get("doc_id"), p.get("chunk_id")): p.get("score") for p in payloads}
 
         chunks = fetch_chunks_by_pairs(pairs)
@@ -459,7 +493,10 @@ def register_tools(mcp: FastMCP) -> None:
             "related": related,
         }
 
-    @mcp.tool()
+    if enable_legacy:
+        mcp.tool()(query_graph_rag)
+
+    # @mcp.tool()
     def list_docs(limit: int = 50) -> List[str]:
         """List available doc_id values from Neo4j."""
         with get_neo4j().session() as session:
@@ -470,6 +507,22 @@ def register_tools(mcp: FastMCP) -> None:
             return [r["id"] for r in result]
 
     @mcp.tool()
+    def list_source_ids(limit: int = 50) -> List[str]:
+        """List available source_id values from Neo4j (Paragraph nodes)."""
+        with get_neo4j().session() as session:
+            result = session.run(
+                """
+                MATCH (p:Paragraph)
+                WHERE p.source_id IS NOT NULL
+                RETURN DISTINCT p.source_id AS source_id
+                ORDER BY source_id
+                LIMIT $limit
+                """,
+                limit=limit,
+            )
+            return [r["source_id"] for r in result]
+
+    # @mcp.tool()
     def list_docs_meta(limit: int = 50) -> List[Dict[str, Any]]:
         """List available docs with metadata (id, name, aliases, source, ingested_at)."""
         with get_neo4j().session() as session:
@@ -514,6 +567,9 @@ def register_tools(mcp: FastMCP) -> None:
         embedder = get_embedder()
         q_vec = embedder.encode([query])[0].tolist()
 
+        if entity_types is None:
+            entity_types = list(ENTITY_TYPES_DEFAULT)
+
         payloads = qdrant_search_entity_payload(
             q_vec, top_k=top_k, source_id=source_id, collection=collection
         )
@@ -553,7 +609,6 @@ def register_tools(mcp: FastMCP) -> None:
             "relations": relations,
         }
 
-    @mcp.tool()
     def query_graph_rag_auto(
         query: str,
         top_k: int = 5,
@@ -635,6 +690,9 @@ def register_tools(mcp: FastMCP) -> None:
                 "Use query_graph_rag or query_graph_rag_langextract explicitly."
             ),
         }
+
+    if enable_legacy:
+        mcp.tool()(query_graph_rag_auto)
 
 
 if __name__ == "__main__":

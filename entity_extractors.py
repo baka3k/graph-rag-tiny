@@ -1,11 +1,24 @@
 import json
 import logging
 import os
+import re
 import textwrap
 import time
-from pathlib import Path
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
+
+
+DEFAULT_GLINER_LABELS = [
+    "PERSON",
+    "ORG",
+    "PRODUCT",
+    "GPE",
+    "DATE",
+    "TECH",
+    "CRYPTO",
+    "STANDARD",
+]
 
 
 def _normalize_entities(entities: List[Dict[str, Any]]) -> List[Dict[str, str]]:
@@ -129,12 +142,77 @@ def build_spacy_pipeline(model: str, ruler_json: str | None = None):
     return nlp
 
 
+def parse_gliner_labels(raw: str | None) -> List[str]:
+    if raw is None:
+        return list(DEFAULT_GLINER_LABELS)
+    candidate = raw.strip()
+    if not candidate:
+        return list(DEFAULT_GLINER_LABELS)
+    path = Path(candidate)
+    if path.exists() and path.is_file():
+        content = path.read_text(encoding="utf-8")
+        labels = [item.strip() for item in re.split(r"[,\n]+", content) if item.strip()]
+        return labels or list(DEFAULT_GLINER_LABELS)
+    labels = [item.strip() for item in candidate.split(",") if item.strip()]
+    return labels or list(DEFAULT_GLINER_LABELS)
+
+
+def _resolve_gliner_model(model: str) -> str:
+    if model and Path(model).exists():
+        return model
+    env_path = os.getenv("GLINER_MODEL_PATH")
+    if env_path and Path(env_path).exists():
+        return env_path
+    return model
+
+
+def _gliner_local_only(resolved_model: str) -> bool:
+    if resolved_model and Path(resolved_model).exists():
+        return True
+    offline = os.getenv("HF_HUB_OFFLINE") or os.getenv("TRANSFORMERS_OFFLINE")
+    if offline and offline.strip().lower() not in {"0", "false", "no"}:
+        return True
+    local_only = os.getenv("GLINER_LOCAL_ONLY")
+    if local_only and local_only.strip().lower() not in {"0", "false", "no"}:
+        return True
+    return False
+
+
+@lru_cache(maxsize=2)
+def build_gliner_model(model: str):
+    try:
+        from gliner import GLiNER
+    except Exception as exc:
+        raise RuntimeError("gliner is not installed. pip install gliner") from exc
+
+    resolved_model = _resolve_gliner_model(model)
+    local_only = _gliner_local_only(resolved_model)
+    if local_only:
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+    return GLiNER.from_pretrained(resolved_model, local_files_only=local_only)
+
+
 def extract_entities_spacy(
     text: str, model: str = "en_core_web_sm", ruler_json: str | None = None
 ) -> Tuple[List[Dict[str, str]], List[Dict[str, str]]]:
     nlp = build_spacy_pipeline(model, ruler_json=ruler_json)
     doc = nlp(text)
     entities = [{"name": ent.text, "type": ent.label_} for ent in doc.ents]
+    return _normalize_entities(entities), []
+
+
+def extract_entities_gliner(
+    text: str,
+    labels: List[str] | None = None,
+    model: str = "urchade/gliner_mediumv2",
+    threshold: float = 0.3,
+    gliner_model=None,
+) -> Tuple[List[Dict[str, str]], List[Dict[str, str]]]:
+    label_list = labels or list(DEFAULT_GLINER_LABELS)
+    model_instance = gliner_model or build_gliner_model(model)
+    predictions = model_instance.predict_entities(text, label_list, threshold=threshold)
+    entities = [{"name": item["text"], "type": item["label"]} for item in predictions]
     return _normalize_entities(entities), []
 
 

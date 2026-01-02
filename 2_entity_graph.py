@@ -12,7 +12,10 @@ from entity_extractors import (
     build_spacy_pipeline,
     extract_entities_azure,
     extract_entities_gemini,
+    extract_entities_gliner,
     extract_entities_langextract,
+    build_gliner_model,
+    parse_gliner_labels,
 )
 
 
@@ -24,10 +27,17 @@ def main() -> None:
     parser.add_argument("--neo4j-pass", default="password")
     parser.add_argument("--spacy-model", default="en_core_web_sm")
     parser.add_argument("--ruler-json", default=None, help="Path to EntityRuler JSON patterns")
+    parser.add_argument("--gliner-model", default="urchade/gliner_mediumv2")
+    parser.add_argument(
+        "--gliner-labels",
+        default="PERSON,ORG,PRODUCT,GPE,DATE,TECH,CRYPTO,STANDARD",
+        help="Comma-separated labels or path to a text file for GLiNER",
+    )
+    parser.add_argument("--gliner-threshold", type=float, default=0.3)
     parser.add_argument(
         "--entity-provider",
-        choices=["spacy", "azure", "gemini", "langextract"],
-        default="spacy",
+        choices=["spacy", "gliner", "azure", "gemini", "langextract"],
+        default="gliner",
         help="Entity extraction provider",
     )
     args = parser.parse_args()
@@ -45,6 +55,9 @@ def main() -> None:
         )
         if args.entity_provider == "spacy":
             nlp = build_spacy_pipeline(args.spacy_model, ruler_json=args.ruler_json)
+        if args.entity_provider == "gliner":
+            gliner_labels = parse_gliner_labels(args.gliner_labels)
+            gliner_model = build_gliner_model(args.gliner_model)
         for record in chunks:
             chunk_id = record["id"]
             text = record["text"] or ""
@@ -52,6 +65,14 @@ def main() -> None:
                 doc = nlp(text)
                 entities = [{"name": ent.text, "type": ent.label_} for ent in doc.ents]
                 relations = []
+            elif args.entity_provider == "gliner":
+                entities, relations = extract_entities_gliner(
+                    text,
+                    labels=gliner_labels,
+                    model=args.gliner_model,
+                    threshold=args.gliner_threshold,
+                    gliner_model=gliner_model,
+                )
             elif args.entity_provider == "azure":
                 entities, relations = extract_entities_azure(text)
             elif args.entity_provider == "gemini":
