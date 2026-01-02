@@ -348,7 +348,7 @@ Two main steps:
 
 ### Special points
 
-- Uses `source_id` (not legacy `doc_id`).
+- Uses `source_id` to link passages with Neo4j.
 - The bridge between Qdrant and Neo4j is **`entity_ids`** from LangExtract/GLiNER ingest.(you can choose another, such as spaCy)
 - Relation expansion is optional to balance speed vs depth.
 
