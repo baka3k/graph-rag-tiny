@@ -353,3 +353,14 @@ query_graph_rag_langextract(
   max_passage_chars=800
 )
 ```
+# Graph RAG
+
+<img src="resources/neo4j.png" alt="GraphRAG LangExtract">
+
+# Config MCP
+
+<img src="resources/screenshot_1.png" alt="GraphRAG LangExtract">
+
+# Use GraphRAG to create sequences diagram from Document
+
+<img src="resources/screenshot_2.png" alt="GraphRAG LangExtract">
