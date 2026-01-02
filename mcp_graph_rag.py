@@ -1,9 +1,8 @@
 import argparse
 import os
 import signal
-import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
 from neo4j import GraphDatabase
@@ -67,7 +66,6 @@ ENTITY_TYPES_DEFAULT = _parse_entity_types(
 _qdrant_client: Optional[QdrantClient] = None
 _neo4j_driver = None
 _embedder: Optional[SentenceTransformer] = None
-_entity_schema_cached: Optional[Tuple[bool, bool]] = None
 
 
 def get_qdrant() -> QdrantClient:
@@ -93,78 +91,6 @@ def get_neo4j():
     if _neo4j_driver is None:
         _neo4j_driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
     return _neo4j_driver
-
-
-def entity_schema_available() -> Tuple[bool, bool]:
-    global _entity_schema_cached
-    if _entity_schema_cached is not None:
-        return _entity_schema_cached
-
-    with get_neo4j().session() as session:
-        labels = {r["label"] for r in session.run("CALL db.labels() YIELD label")}
-        rels = {
-            r["relationshipType"]
-            for r in session.run("CALL db.relationshipTypes() YIELD relationshipType")
-        }
-    _entity_schema_cached = ("Entity" in labels, "MENTIONS" in rels)
-    return _entity_schema_cached
-
-
-def qdrant_search(
-    query_vector: List[float],
-    top_k: int,
-    doc_id: Optional[str],
-    source_id: Optional[str] = None,
-    collection: Optional[str] = None,
-) -> List[Dict[str, Any]]:
-    qdrant = get_qdrant()
-    collection_name = collection or QDRANT_COLLECTION
-    qdrant_filter = None
-    must = []
-    if doc_id:
-        must.append(
-            qmodels.FieldCondition(
-                key="doc_id",
-                match=qmodels.MatchValue(value=doc_id),
-            )
-        )
-    if source_id:
-        must.append(
-            qmodels.FieldCondition(
-                key="source_id",
-                match=qmodels.MatchValue(value=source_id),
-            )
-        )
-    if must:
-        qdrant_filter = qmodels.Filter(must=must)
-
-    if hasattr(qdrant, "search"):
-        hits = qdrant.search(
-            collection_name=collection_name,
-            query_vector=query_vector,
-            limit=top_k,
-            query_filter=qdrant_filter,
-        )
-    else:
-        hits = qdrant.query_points(
-            collection_name=collection_name,
-            query=query_vector,
-            limit=top_k,
-            query_filter=qdrant_filter,
-        ).points
-
-    payloads = []
-    for h in hits:
-        if not h.payload or h.payload.get("chunk_id") is None:
-            continue
-        payloads.append(
-            {
-                "doc_id": h.payload.get("doc_id"),
-                "chunk_id": h.payload.get("chunk_id"),
-                "score": getattr(h, "score", None),
-            }
-        )
-    return payloads
 
 
 def qdrant_search_entity_payload(
@@ -217,99 +143,6 @@ def qdrant_search_entity_payload(
     return payloads
 
 
-def _detect_collection_mode(collection: str) -> str:
-    qdrant = get_qdrant()
-    try:
-        points, _ = qdrant.scroll(
-            collection_name=collection,
-            limit=1,
-            with_payload=True,
-        )
-    except Exception:
-        return "unknown"
-    if not points:
-        return "empty"
-    payload = getattr(points[0], "payload", None) or {}
-    if "entity_ids" in payload:
-        return "langextract"
-    if "chunk_id" in payload or "doc_id" in payload:
-        return "legacy"
-    return "unknown"
-
-
-def fetch_chunks_by_pairs(pairs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    if not pairs:
-        return []
-    with get_neo4j().session() as session:
-        result = session.run(
-            """
-            UNWIND $pairs AS pair
-            MATCH (c:Chunk {doc_id: pair.doc_id, id: pair.chunk_id})
-            RETURN c.id AS id, c.doc_id AS doc_id, c.text AS text, c.page AS page
-            """,
-            pairs=pairs,
-        )
-        return [dict(r) for r in result]
-
-
-def fetch_entities_for_pairs(
-    pairs: List[Dict[str, Any]], entity_types: Optional[List[str]]
-) -> List[Dict[str, Any]]:
-    if not pairs:
-        return []
-    has_entity, has_mentions = entity_schema_available()
-    if not (has_entity and has_mentions):
-        return []
-    entity_types = entity_types or []
-    with get_neo4j().session() as session:
-        result = session.run(
-            """
-            UNWIND $pairs AS pair
-            MATCH (c:Chunk {doc_id: pair.doc_id, id: pair.chunk_id})-[:MENTIONS]->(e:Entity)
-            WHERE $types = [] OR e.type IN $types
-            RETURN c.id AS id, c.doc_id AS doc_id, collect(DISTINCT e.name) AS entities
-            """,
-            pairs=pairs,
-            types=entity_types,
-        )
-        return [dict(r) for r in result]
-
-
-def fetch_related_chunks(
-    entities: List[str],
-    exclude_pairs: List[Dict[str, Any]],
-    related_k: int,
-    related_doc_ids: Optional[List[str]],
-) -> List[Dict[str, Any]]:
-    if not entities or related_k <= 0:
-        return []
-    has_entity, has_mentions = entity_schema_available()
-    if not (has_entity and has_mentions):
-        return []
-
-    exclude_pairs = exclude_pairs or []
-    related_doc_ids = related_doc_ids or []
-    with get_neo4j().session() as session:
-        result = session.run(
-            """
-            UNWIND $exclude AS ex
-            WITH collect({doc_id: ex.doc_id, chunk_id: ex.chunk_id}) AS excluded
-            MATCH (c:Chunk)-[:MENTIONS]->(e:Entity)
-            WHERE e.name IN $entities
-            AND NOT {doc_id: c.doc_id, chunk_id: c.id} IN excluded
-            AND ($doc_ids = [] OR c.doc_id IN $doc_ids)
-            RETURN c.id AS id, c.doc_id AS doc_id, c.text AS text, c.page AS page,
-                   collect(DISTINCT e.name) AS entities
-            LIMIT $limit
-            """,
-            entities=entities,
-            exclude=exclude_pairs,
-            doc_ids=related_doc_ids,
-            limit=related_k,
-        )
-        return [dict(r) for r in result]
-
-
 def fetch_entities_by_ids(entity_ids: List[str]) -> List[Dict[str, Any]]:
     if not entity_ids:
         return []
@@ -351,34 +184,6 @@ def fetch_relations_by_entity_ids(
         return [dict(r) for r in result]
 
 
-def fetch_relations_for_pairs(
-    pairs: List[Dict[str, Any]], entity_types: Optional[List[str]]
-) -> List[Dict[str, Any]]:
-    if not pairs:
-        return []
-    has_entity, _has_mentions = entity_schema_available()
-    if not has_entity:
-        return []
-    entity_types = entity_types or []
-    with get_neo4j().session() as session:
-        result = session.run(
-            """
-            UNWIND $pairs AS pair
-            MATCH (c:Chunk {doc_id: pair.doc_id, id: pair.chunk_id})-[:MENTIONS]->(e:Entity)
-            WHERE $types = [] OR e.type IN $types
-            MATCH (e)-[r:RELATED]->(e2:Entity)
-            RETURN c.id AS id, c.doc_id AS doc_id,
-                   collect(DISTINCT {
-                     source: e.name, source_type: e.type,
-                     relation: r.type, target: e2.name, target_type: e2.type
-                   }) AS relations
-            """,
-            pairs=pairs,
-            types=entity_types,
-        )
-        return [dict(r) for r in result]
-
-
 def fetch_paragraph_by_source(
     source_id: str,
     paragraph_id: int,
@@ -399,133 +204,9 @@ def fetch_paragraph_by_source(
         return dict(record) if record else None
 
 
-def resolve_doc_id(doc_ref: str) -> Optional[str]:
-    """Resolve a doc reference (id, alias, or name) to a canonical doc_id."""
-    if not doc_ref:
-        return None
-    with get_neo4j().session() as session:
-        result = session.run(
-            """
-            MATCH (d:Document)
-            WHERE d.id = $ref OR d.name = $ref OR $ref IN coalesce(d.aliases, [])
-            RETURN d.id AS id
-            LIMIT 1
-            """,
-            ref=doc_ref,
-        )
-        record = result.single()
-        return record["id"] if record else None
 
 
 def register_tools(mcp: FastMCP) -> None:
-    enable_legacy = os.getenv("FASTMCP_ENABLE_LEGACY", "").strip().lower() in {"1", "true", "yes"}
-
-    def query_graph_rag(
-        query: str,
-        top_k: int = 3,
-        doc_id: Optional[str] = None,
-        doc_ref: Optional[str] = None,
-        include_entities: bool = True,
-        include_relations: bool = True,
-        expand_related: bool = True,
-        related_scope: str = "same-doc",
-        related_k: int = 3,
-        entity_types: Optional[List[str]] = None,
-        max_chunk_chars: Optional[int] = None,
-        source_id: Optional[str] = None,
-        collection: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        Query Qdrant for top-k chunks, then fetch chunk text and optional entities from Neo4j.
-        If expand_related is True, also fetch related chunks via shared entities.
-        """
-        embedder = get_embedder()
-        q_vec = embedder.encode([query])[0].tolist()
-
-        if not doc_id and doc_ref:
-            doc_id = resolve_doc_id(doc_ref)
-
-        if entity_types is None:
-            entity_types = list(ENTITY_TYPES_DEFAULT)
-
-        payloads = qdrant_search(
-            q_vec,
-            top_k=top_k,
-            doc_id=doc_id,
-            source_id=source_id,
-            collection=collection,
-        )
-        if source_id and not payloads:
-            return {
-                "top_k": top_k,
-                "doc_id": doc_id,
-                "chunks": [],
-                "entities": [],
-                "relations": [],
-                "related": [],
-                "warning": "No chunk payloads found for source_id. If using graphrag_ingest_langextract, use query_graph_rag_langextract.",
-            }
-        pairs = [
-            {"doc_id": p.get("doc_id"), "chunk_id": p.get("chunk_id")} for p in payloads
-        ]
-        pairs = list({(p["doc_id"], p["chunk_id"]): p for p in pairs}.values())
-        score_map = {(p.get("doc_id"), p.get("chunk_id")): p.get("score") for p in payloads}
-
-        chunks = fetch_chunks_by_pairs(pairs)
-        for chunk in chunks:
-            chunk["score"] = score_map.get((chunk.get("doc_id"), chunk.get("id")))
-            if max_chunk_chars and chunk.get("text"):
-                chunk["text"] = chunk["text"][:max_chunk_chars]
-
-        entities = (
-            fetch_entities_for_pairs(pairs, entity_types) if include_entities else []
-        )
-
-        relations = []
-        related = []
-        if expand_related and include_entities:
-            entity_names = []
-            for row in entities:
-                entity_names.extend(row.get("entities") or [])
-            entity_names = list(dict.fromkeys(entity_names))
-            related_doc_ids: Optional[List[str]] = None
-            if related_scope == "same-doc":
-                if doc_id:
-                    related_doc_ids = [doc_id]
-                else:
-                    related_doc_ids = list({p.get("doc_id") for p in pairs if p.get("doc_id")})
-            related = fetch_related_chunks(entity_names, pairs, related_k, related_doc_ids)
-            if max_chunk_chars and related:
-                for chunk in related:
-                    if chunk.get("text"):
-                        chunk["text"] = chunk["text"][:max_chunk_chars]
-
-        if include_relations:
-            relations = fetch_relations_for_pairs(pairs, entity_types)
-
-        return {
-            "top_k": top_k,
-            "doc_id": doc_id,
-            "collection": collection or QDRANT_COLLECTION,
-            "chunks": chunks,
-            "entities": entities,
-            "relations": relations,
-            "related": related,
-        }
-
-    if enable_legacy:
-        mcp.tool()(query_graph_rag)
-
-    # @mcp.tool()
-    def list_docs(limit: int = 50) -> List[str]:
-        """List available doc_id values from Neo4j."""
-        with get_neo4j().session() as session:
-            result = session.run(
-                "MATCH (d:Document) RETURN d.id AS id ORDER BY d.id LIMIT $limit",
-                limit=limit,
-            )
-            return [r["id"] for r in result]
-
     @mcp.tool()
     def list_source_ids(limit: int = 50) -> List[str]:
         """List available source_id values from Neo4j (Paragraph nodes)."""
@@ -541,25 +222,6 @@ def register_tools(mcp: FastMCP) -> None:
                 limit=limit,
             )
             return [r["source_id"] for r in result]
-
-    # @mcp.tool()
-    def list_docs_meta(limit: int = 50) -> List[Dict[str, Any]]:
-        """List available docs with metadata (id, name, aliases, source, ingested_at)."""
-        with get_neo4j().session() as session:
-            result = session.run(
-                """
-                MATCH (d:Document)
-                RETURN d.id AS id,
-                       d.name AS name,
-                       coalesce(d.aliases, []) AS aliases,
-                       d.source AS source,
-                       d.ingested_at AS ingested_at
-                ORDER BY d.id
-                LIMIT $limit
-                """,
-                limit=limit,
-            )
-            return [dict(r) for r in result]
 
     @mcp.tool()
     def list_qdrant_collections() -> List[str]:
@@ -646,91 +308,6 @@ def register_tools(mcp: FastMCP) -> None:
                 "warning": "Paragraph not found.",
             }
         return record
-
-    def query_graph_rag_auto(
-        query: str,
-        top_k: int = 5,
-        collection: Optional[str] = None,
-        prefer: Optional[str] = None,
-        doc_id: Optional[str] = None,
-        doc_ref: Optional[str] = None,
-        source_id: Optional[str] = None,
-        include_entities: bool = True,
-        include_relations: bool = True,
-        expand_related: bool = True,
-        related_scope: str = "same-doc",
-        related_k: int = 50,
-        entity_types: Optional[List[str]] = None,
-        max_chunk_chars: Optional[int] = None,
-        max_passage_chars: Optional[int] = None,
-    ) -> Dict[str, Any]:
-        """
-        Auto route to query_graph_rag or query_graph_rag_langextract based on Qdrant payload.
-        Returns context only (no LLM generation).
-        """
-        collection_name = collection or QDRANT_COLLECTION
-        prefer = (prefer or "").strip().lower()
-        if prefer in {"langextract", "legacy"}:
-            mode = prefer
-        elif prefer:
-            return {
-                "query": query,
-                "top_k": top_k,
-                "collection": collection_name,
-                "selected_tool": None,
-                "warning": (
-                    "Invalid prefer value. Use 'langextract' or 'legacy'. "
-                    "Falling back to auto-detect is disabled when prefer is set."
-                ),
-            }
-        else:
-            mode = _detect_collection_mode(collection_name)
-        if mode == "langextract":
-            result = query_graph_rag_langextract(
-                query=query,
-                top_k=top_k,
-                source_id=source_id,
-                collection=collection_name,
-                include_entities=include_entities,
-                include_relations=include_relations,
-                expand_related=expand_related,
-                related_k=related_k,
-                entity_types=entity_types,
-                max_passage_chars=max_passage_chars,
-            )
-            result["selected_tool"] = "query_graph_rag_langextract"
-            return result
-        if mode == "legacy":
-            result = query_graph_rag(
-                query=query,
-                top_k=top_k,
-                doc_id=doc_id,
-                doc_ref=doc_ref,
-                include_entities=include_entities,
-                include_relations=include_relations,
-                expand_related=expand_related,
-                related_scope=related_scope,
-                related_k=related_k,
-                entity_types=entity_types,
-                max_chunk_chars=max_chunk_chars,
-                source_id=source_id,
-                collection=collection_name,
-            )
-            result["selected_tool"] = "query_graph_rag"
-            return result
-        return {
-            "query": query,
-            "top_k": top_k,
-            "collection": collection_name,
-            "selected_tool": None,
-            "warning": (
-                "Unable to infer collection mode. "
-                "Use query_graph_rag or query_graph_rag_langextract explicitly."
-            ),
-        }
-
-    if enable_legacy:
-        mcp.tool()(query_graph_rag_auto)
 
 
 if __name__ == "__main__":
