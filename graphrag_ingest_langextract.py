@@ -110,6 +110,7 @@ def build_graph_components(
     gliner_model=None,
     gliner_labels: List[str] | None = None,
     gliner_threshold: float = 0.3,
+    merge_entities: bool = True,
 ) -> Tuple[Dict[str, Dict[str, str]], List[Dict[str, str]]]:
     if provider == "spacy":
         doc = nlp(text)
@@ -126,12 +127,13 @@ def build_graph_components(
         entities, relations = extract_entities_gemini(text)
     else:
         entities, relations = extract_entities_langextract(text)
-    return build_graph_components_from_entities(entities, relations)
+    return build_graph_components_from_entities(entities, relations, merge_entities=merge_entities)
 
 
 def build_graph_components_from_entities(
     entities: List[Dict[str, str]],
     relations: List[Dict[str, str]],
+    merge_entities: bool = True,
 ) -> Tuple[Dict[str, Dict[str, str]], List[Dict[str, str]]]:
     nodes: Dict[str, Dict[str, str]] = {}
     name_index: Dict[str, str] = {}
@@ -141,10 +143,20 @@ def build_graph_components_from_entities(
             continue
         ent_type = ent.get("type", "UNKNOWN") or "UNKNOWN"
         name_norm = _normalize_entity_name(name)
-        key = f"{ent_type}::{name_norm}"
-        if key not in nodes:
+        if merge_entities:
+            key = f"{ent_type}::{name_norm}"
+            if key not in nodes:
+                nodes[key] = {
+                    "id": _entity_id(name, ent_type),
+                    "name": name,
+                    "type": ent_type,
+                    "name_norm": name_norm,
+                }
+                name_index.setdefault(name_norm, key)
+        else:
+            key = str(uuid.uuid4())
             nodes[key] = {
-                "id": _entity_id(name, ent_type),
+                "id": str(uuid.uuid4()),
                 "name": name,
                 "type": ent_type,
                 "name_norm": name_norm,
@@ -161,9 +173,9 @@ def build_graph_components_from_entities(
         target_norm = _normalize_entity_name(target)
         source_key = name_index.get(source_norm)
         if source_key is None:
-            source_key = f"UNKNOWN::{source_norm}"
+            source_key = f"UNKNOWN::{source_norm}" if merge_entities else str(uuid.uuid4())
             nodes[source_key] = {
-                "id": _entity_id(source, "UNKNOWN"),
+                "id": _entity_id(source, "UNKNOWN") if merge_entities else str(uuid.uuid4()),
                 "name": source,
                 "type": "UNKNOWN",
                 "name_norm": source_norm,
@@ -171,9 +183,9 @@ def build_graph_components_from_entities(
             name_index.setdefault(source_norm, source_key)
         target_key = name_index.get(target_norm)
         if target_key is None:
-            target_key = f"UNKNOWN::{target_norm}"
+            target_key = f"UNKNOWN::{target_norm}" if merge_entities else str(uuid.uuid4())
             nodes[target_key] = {
-                "id": _entity_id(target, "UNKNOWN"),
+                "id": _entity_id(target, "UNKNOWN") if merge_entities else str(uuid.uuid4()),
                 "name": target,
                 "type": "UNKNOWN",
                 "name_norm": target_norm,
@@ -432,6 +444,7 @@ def process_text(
         gliner_model = build_gliner_model(args.gliner_model_resolved)
     gliner_labels = parse_gliner_labels(args.gliner_labels)
     use_gliner_batch = args.entity_provider == "gliner" and not args.no_batch
+    merge_entities = not args.no_entity_merge
     if args.no_batch:
         args.gliner_batch_size = 1
         args.neo4j_batch_size = 1
@@ -493,7 +506,9 @@ def process_text(
                 gliner_model=gliner_model,
             )
             for (idx, paragraph), entities in zip(batch_items, batch_entities, strict=True):
-                nodes, relations = build_graph_components_from_entities(entities, [])
+        nodes, relations = build_graph_components_from_entities(
+            entities, [], merge_entities=merge_entities
+        )
                 print(f"Paragraph {idx + 1}/{len(paragraphs)}: extracted {len(nodes)} entities.")
                 neo4j_batch.append(
                     {
@@ -520,6 +535,7 @@ def process_text(
                 gliner_model=gliner_model,
                 gliner_labels=gliner_labels,
                 gliner_threshold=args.gliner_threshold,
+                merge_entities=merge_entities,
             )
             print(f"Extracted {len(nodes)} entities, {len(relations)} relations.")
             neo4j_batch.append(
@@ -590,6 +606,11 @@ def main() -> None:
         type=int,
         default=8,
         help="Batch size for GLiNER entity extraction.",
+    )
+    parser.add_argument(
+        "--no-entity-merge",
+        action="store_true",
+        help="Do not merge entities across paragraphs (use per-paragraph IDs).",
     )
     parser.add_argument(
         "--no-batch",
