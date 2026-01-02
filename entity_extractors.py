@@ -216,6 +216,44 @@ def extract_entities_gliner(
     return _normalize_entities(entities), []
 
 
+def _gliner_predictions_to_entities(predictions: List[Dict[str, Any]] | None) -> List[Dict[str, str]]:
+    entities = []
+    for item in predictions or []:
+        name = _coerce_attr(item.get("text"))
+        label = _coerce_attr(item.get("label"))
+        entities.append({"name": name, "type": label})
+    return _normalize_entities(entities)
+
+
+def extract_entities_gliner_batch(
+    texts: List[str],
+    labels: List[str] | None = None,
+    model: str = "urchade/gliner_mediumv2",
+    threshold: float = 0.3,
+    gliner_model=None,
+) -> List[List[Dict[str, str]]]:
+    label_list = labels or list(DEFAULT_GLINER_LABELS)
+    model_instance = gliner_model or build_gliner_model(model)
+    predictions = None
+    batch_method = getattr(model_instance, "batch_predict_entities", None)
+    if callable(batch_method):
+        predictions = batch_method(texts, label_list, threshold=threshold)
+    if predictions is None:
+        batch_method = getattr(model_instance, "predict_entities_batch", None)
+        if callable(batch_method):
+            predictions = batch_method(texts, label_list, threshold=threshold)
+    if predictions is None:
+        try:
+            predictions = model_instance.predict_entities(texts, label_list, threshold=threshold)
+        except Exception:
+            predictions = None
+    if not isinstance(predictions, list) or len(predictions) != len(texts):
+        predictions = [
+            model_instance.predict_entities(text, label_list, threshold=threshold) for text in texts
+        ]
+    return [_gliner_predictions_to_entities(items) for items in predictions]
+
+
 def extract_entities_azure(text: str) -> Tuple[List[Dict[str, str]], List[Dict[str, str]]]:
     from openai import AzureOpenAI
 

@@ -25,6 +25,7 @@ from entity_extractors import (
     build_spacy_pipeline,
     extract_entities_gemini,
     extract_entities_gliner,
+    extract_entities_gliner_batch,
     extract_entities_langextract,
     build_gliner_model,
     parse_gliner_labels,
@@ -151,6 +152,44 @@ def build_graph_components(
     return nodes, cleaned_relations
 
 
+def build_graph_components_from_entities(
+    entities: List[Dict[str, str]],
+    relations: List[Dict[str, str]],
+) -> Tuple[Dict[str, Dict[str, str]], List[Dict[str, str]]]:
+    nodes: Dict[str, Dict[str, str]] = {}
+    for ent in entities:
+        name = ent.get("name", "").strip()
+        if not name:
+            continue
+        nodes.setdefault(
+            name,
+            {
+                "id": str(uuid.uuid4()),
+                "name": name,
+                "type": ent.get("type", "UNKNOWN") or "UNKNOWN",
+            },
+        )
+    cleaned_relations = []
+    for rel in relations:
+        source = rel.get("source", "").strip()
+        target = rel.get("target", "").strip()
+        rel_type = rel.get("relation", "").strip() or "RELATED"
+        if not source or not target:
+            continue
+        if source not in nodes:
+            nodes[source] = {"id": str(uuid.uuid4()), "name": source, "type": "UNKNOWN"}
+        if target not in nodes:
+            nodes[target] = {"id": str(uuid.uuid4()), "name": target, "type": "UNKNOWN"}
+        cleaned_relations.append(
+            {
+                "source_id": nodes[source]["id"],
+                "target_id": nodes[target]["id"],
+                "type": rel_type,
+            }
+        )
+    return nodes, cleaned_relations
+
+
 def ingest_to_neo4j(
     driver,
     nodes: Dict[str, Dict[str, str]],
@@ -218,6 +257,92 @@ def ingest_to_neo4j(
                 type=rel["type"],
                 source_doc=source_id,
                 paragraph_id=paragraph_id,
+            )
+
+
+def ingest_to_neo4j_batch(driver, items: List[Dict[str, Any]]) -> None:
+    paragraphs = []
+    entities = []
+    relations = []
+    for item in items:
+        paragraph_text = item.get("paragraph_text")
+        if paragraph_text is not None:
+            paragraphs.append(
+                {
+                    "doc_id": item["source_id"],
+                    "doc_name": item["source_id"],
+                    "source_id": item["source_id"],
+                    "paragraph_id": item["paragraph_id"],
+                    "text": paragraph_text,
+                    "is_short": item.get("is_short", False),
+                }
+            )
+        for node in item.get("nodes", {}).values():
+            entities.append(
+                {
+                    "id": node["id"],
+                    "name": node["name"],
+                    "type": node["type"],
+                    "source_id": item["source_id"],
+                    "paragraph_id": item["paragraph_id"],
+                }
+            )
+        for rel in item.get("relations", []):
+            relations.append(
+                {
+                    "source_id": rel["source_id"],
+                    "target_id": rel["target_id"],
+                    "type": rel["type"],
+                    "source_doc": item["source_id"],
+                    "paragraph_id": item["paragraph_id"],
+                }
+            )
+    with driver.session() as session:
+        if paragraphs:
+            session.run(
+                """
+                UNWIND $paragraphs AS row
+                MERGE (d:Document {id: row.doc_id})
+                SET d.name = row.doc_name
+                MERGE (p:Paragraph {source_id: row.source_id, paragraph_id: row.paragraph_id})
+                SET p.text = row.text,
+                    p.short = row.is_short
+                MERGE (d)-[:HAS_PARAGRAPH]->(p)
+                """,
+                paragraphs=paragraphs,
+            )
+        if entities:
+            session.run(
+                """
+                UNWIND $entities AS row
+                MERGE (e:Entity {id: row.id})
+                SET e.name = row.name,
+                    e.type = row.type,
+                    e.source_id = row.source_id,
+                    e.paragraph_id = row.paragraph_id
+                """,
+                entities=entities,
+            )
+            session.run(
+                """
+                UNWIND $entities AS row
+                MATCH (p:Paragraph {source_id: row.source_id, paragraph_id: row.paragraph_id})
+                MATCH (e:Entity {id: row.id})
+                MERGE (p)-[:HAS_ENTITY]->(e)
+                """,
+                entities=entities,
+            )
+        if relations:
+            session.run(
+                """
+                UNWIND $relations AS row
+                MATCH (s:Entity {id: row.source_id})
+                MATCH (t:Entity {id: row.target_id})
+                MERGE (s)-[r:RELATED {type: row.type}]->(t)
+                SET r.source_id = row.source_doc,
+                    r.paragraph_id = row.paragraph_id
+                """,
+                relations=relations,
             )
 
 
@@ -312,6 +437,17 @@ def process_text(
 
     paragraphs = split_paragraphs(raw_text, args.max_paragraph_chars)
     print(f"Chunked into {len(paragraphs)} paragraphs.")
+    neo4j_batch: List[Dict[str, Any]] = []
+
+    def flush_neo4j_batch() -> None:
+        if not neo4j_batch:
+            return
+        print(f"Ingesting {len(neo4j_batch)} paragraphs to Neo4j (batch)...")
+        ingest_to_neo4j_batch(driver, neo4j_batch)
+        neo4j_batch.clear()
+        print("Neo4j batch ingestion complete.")
+
+    long_paragraphs: List[Tuple[int, str]] = []
     for idx, paragraph in enumerate(paragraphs):
         if not paragraph:
             continue
@@ -320,48 +456,87 @@ def process_text(
                 print(
                     f"Paragraph {idx + 1}/{len(paragraphs)}: LLM skipped (len={len(paragraph)})"
                 )
-                print("Ingesting short paragraph to Neo4j...")
-                ingest_to_neo4j(
-                    driver,
-                    {},
-                    [],
-                    source_id,
-                    paragraph_id=idx,
-                    paragraph_text=paragraph,
-                    is_short=True,
+                neo4j_batch.append(
+                    {
+                        "source_id": source_id,
+                        "paragraph_id": idx,
+                        "paragraph_text": paragraph,
+                        "is_short": True,
+                        "nodes": {},
+                        "relations": [],
+                    }
                 )
-                print("Neo4j short paragraph stored.")
+                if len(neo4j_batch) >= args.neo4j_batch_size:
+                    flush_neo4j_batch()
                 print("Ingesting to Qdrant...")
                 ingest_to_qdrant(qdrant, args.collection, paragraph, idx, embedder, {}, source_id)
                 print("Qdrant ingestion complete.")
             else:
                 print(f"Paragraph {idx + 1}/{len(paragraphs)}: skipped (len={len(paragraph)})")
             continue
-        print(f"Paragraph {idx + 1}/{len(paragraphs)}: extracting entities/relations...")
-        nodes, relations = build_graph_components(
-            paragraph,
-            args.entity_provider,
-            nlp=nlp,
-            gliner_model=gliner_model,
-            gliner_labels=gliner_labels,
-            gliner_threshold=args.gliner_threshold,
-        )
-        print(f"Extracted {len(nodes)} entities, {len(relations)} relations.")
+        long_paragraphs.append((idx, paragraph))
 
-        print("Ingesting to Neo4j...")
-        ingest_to_neo4j(
-            driver,
-            nodes,
-            relations,
-            source_id,
-            paragraph_id=idx,
-            paragraph_text=paragraph,
-        )
-        print("Neo4j ingestion complete.")
-
-        print("Ingesting to Qdrant...")
-        ingest_to_qdrant(qdrant, args.collection, paragraph, idx, embedder, nodes, source_id)
-        print("Qdrant ingestion complete.")
+    if args.entity_provider == "gliner" and long_paragraphs:
+        batch_size = max(1, args.gliner_batch_size)
+        for start in range(0, len(long_paragraphs), batch_size):
+            batch_items = long_paragraphs[start : start + batch_size]
+            batch_texts = [item[1] for item in batch_items]
+            print(
+                f"Extracting entities with GLiNER (batch {start + 1}-"
+                f"{min(start + batch_size, len(long_paragraphs))})..."
+            )
+            batch_entities = extract_entities_gliner_batch(
+                batch_texts,
+                labels=gliner_labels,
+                threshold=args.gliner_threshold,
+                gliner_model=gliner_model,
+            )
+            for (idx, paragraph), entities in zip(batch_items, batch_entities, strict=True):
+                nodes, relations = build_graph_components_from_entities(entities, [])
+                print(f"Paragraph {idx + 1}/{len(paragraphs)}: extracted {len(nodes)} entities.")
+                neo4j_batch.append(
+                    {
+                        "source_id": source_id,
+                        "paragraph_id": idx,
+                        "paragraph_text": paragraph,
+                        "is_short": False,
+                        "nodes": nodes,
+                        "relations": relations,
+                    }
+                )
+                if len(neo4j_batch) >= args.neo4j_batch_size:
+                    flush_neo4j_batch()
+                print("Ingesting to Qdrant...")
+                ingest_to_qdrant(qdrant, args.collection, paragraph, idx, embedder, nodes, source_id)
+                print("Qdrant ingestion complete.")
+    else:
+        for idx, paragraph in long_paragraphs:
+            print(f"Paragraph {idx + 1}/{len(paragraphs)}: extracting entities/relations...")
+            nodes, relations = build_graph_components(
+                paragraph,
+                args.entity_provider,
+                nlp=nlp,
+                gliner_model=gliner_model,
+                gliner_labels=gliner_labels,
+                gliner_threshold=args.gliner_threshold,
+            )
+            print(f"Extracted {len(nodes)} entities, {len(relations)} relations.")
+            neo4j_batch.append(
+                {
+                    "source_id": source_id,
+                    "paragraph_id": idx,
+                    "paragraph_text": paragraph,
+                    "is_short": False,
+                    "nodes": nodes,
+                    "relations": relations,
+                }
+            )
+            if len(neo4j_batch) >= args.neo4j_batch_size:
+                flush_neo4j_batch()
+            print("Ingesting to Qdrant...")
+            ingest_to_qdrant(qdrant, args.collection, paragraph, idx, embedder, nodes, source_id)
+            print("Qdrant ingestion complete.")
+    flush_neo4j_batch()
 
 
 def main() -> None:
@@ -409,11 +584,23 @@ def main() -> None:
         help="Comma-separated labels or path to a text file for GLiNER",
     )
     parser.add_argument("--gliner-threshold", type=float, default=0.3)
+    parser.add_argument(
+        "--gliner-batch-size",
+        type=int,
+        default=8,
+        help="Batch size for GLiNER entity extraction.",
+    )
     parser.add_argument("--langextract-model-id", default=os.getenv("LANGEXTRACT_MODEL_ID"))
     parser.add_argument("--langextract-model-url", default=os.getenv("LANGEXTRACT_MODEL_URL"))
     parser.add_argument("--llm-debug", action="store_true", help="Print raw LLM output")
     parser.add_argument("--llm-retry-count", type=int, default=None)
     parser.add_argument("--llm-retry-backoff", type=float, default=None)
+    parser.add_argument(
+        "--neo4j-batch-size",
+        type=int,
+        default=50,
+        help="Number of paragraphs to write per Neo4j batch.",
+    )
     parser.add_argument("--neo4j-uri", default=os.getenv("NEO4J_URI", "bolt://localhost:7687"))
     parser.add_argument("--neo4j-user", default=os.getenv("NEO4J_USER", "neo4j"))
     parser.add_argument("--neo4j-pass", default=os.getenv("NEO4J_PASS", "password"))
