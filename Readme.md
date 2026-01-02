@@ -156,6 +156,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--raw-text`, or `
 - `--gliner-model`: Deprecated alias; use `--gliner-model-name` or `--gliner-model-path`.
 - `--gliner-labels`: Comma-separated labels or path to text file (one label per line).
 - `--gliner-threshold`: GLiNER confidence threshold (default: `0.3`).
+- `--gliner-batch-size`: Batch size for GLiNER extraction (default: `8`).
 - `--langextract-model-id`: Override `LANGEXTRACT_MODEL_ID` for LangExtract.
 - `--langextract-model-url`: Override `LANGEXTRACT_MODEL_URL` (e.g., Ollama URL).
 - `--llm-debug`: Print raw LLM output and log to `logs/langextract_raw.log`.
@@ -166,6 +167,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--raw-text`, or `
 - `--neo4j-uri`: Neo4j URI (default from `NEO4J_URI`).
 - `--neo4j-user`: Neo4j user (default from `NEO4J_USER`).
 - `--neo4j-pass`: Neo4j password (default from `NEO4J_PASS`).
+- `--neo4j-batch-size`: Number of paragraphs written per Neo4j batch (default: `50`).
 - `--qdrant-url`: Qdrant URL (if set, overrides host/port).
 - `--qdrant-host`: Qdrant host (default from `QDRANT_HOST`).
 - `--qdrant-port`: Qdrant port (default from `QDRANT_PORT`).
@@ -193,6 +195,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--raw-text`, or `
 | Entity | `--gliner-model` | Deprecated alias | `None` |
 | Entity | `--gliner-labels` | Labels (CSV or file path) | `PERSON,ORG,PRODUCT,GPE,DATE,TECH,CRYPTO,STANDARD` |
 | Entity | `--gliner-threshold` | GLiNER confidence threshold | `0.3` |
+| Entity | `--gliner-batch-size` | GLiNER extraction batch size | `8` |
 | Entity | `--langextract-model-id` | Override LangExtract model id | env `LANGEXTRACT_MODEL_ID` |
 | Entity | `--langextract-model-url` | Override LangExtract URL | env `LANGEXTRACT_MODEL_URL` |
 | LLM | `--llm-debug` | Print raw LLM output | `false` |
@@ -201,6 +204,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--raw-text`, or `
 | Neo4j | `--neo4j-uri` | Neo4j URI | env `NEO4J_URI` |
 | Neo4j | `--neo4j-user` | Neo4j user | env `NEO4J_USER` |
 | Neo4j | `--neo4j-pass` | Neo4j password | env `NEO4J_PASS` |
+| Neo4j | `--neo4j-batch-size` | Paragraphs per batch write | `50` |
 | Qdrant | `--qdrant-url` | Qdrant URL (overrides host/port) | env `QDRANT_URL` |
 | Qdrant | `--qdrant-host` | Qdrant host | env `QDRANT_HOST` |
 | Qdrant | `--qdrant-port` | Qdrant port | env `QDRANT_PORT` |
@@ -224,6 +228,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--raw-text`, or `
 - `--gliner-model`: Deprecated alias; use `--gliner-model-name` or `--gliner-model-path`.
 - `--gliner-labels`: Comma-separated labels or path to text file (one label per line).
 - `--gliner-threshold`: GLiNER confidence threshold (default: `0.3`).
+- `--gliner-batch-size`: Batch size for GLiNER extraction (default: `8`).
 - `--langextract-model-id`: Override `LANGEXTRACT_MODEL_ID` for LangExtract.
 - `--langextract-model-url`: Override `LANGEXTRACT_MODEL_URL` (e.g., Ollama URL).
 - `--llm-debug`: Print raw LLM output and log to `logs/langextract_raw.log`.
@@ -232,6 +237,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--raw-text`, or `
 - `--neo4j-uri`: Neo4j URI (default from `NEO4J_URI`).
 - `--neo4j-user`: Neo4j user (default from `NEO4J_USER`).
 - `--neo4j-pass`: Neo4j password (default from `NEO4J_PASS`).
+- `--neo4j-batch-size`: Number of paragraphs written per Neo4j batch (default: `50`).
 - `--qdrant-url`: Qdrant URL (if set, overrides host/port).
 - `--qdrant-host`: Qdrant host (default from `QDRANT_HOST`).
 - `--qdrant-port`: Qdrant port (default from `QDRANT_PORT`).
@@ -246,6 +252,8 @@ python graphrag_ingest_langextract.py \
   --gliner-model-name urchade/gliner_mediumv2 \
   --gliner-labels gliner/labels_digital_key.txt \
   --gliner-threshold 0.35 \
+  --gliner-batch-size 8 \
+  --neo4j-batch-size 50 \
   --neo4j-pass neo4j_pass
 ```
 
