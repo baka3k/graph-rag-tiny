@@ -379,6 +379,26 @@ def fetch_relations_for_pairs(
         return [dict(r) for r in result]
 
 
+def fetch_paragraph_by_source(
+    source_id: str,
+    paragraph_id: int,
+) -> Optional[Dict[str, Any]]:
+    with get_neo4j().session() as session:
+        result = session.run(
+            """
+            MATCH (p:Paragraph {source_id: $source_id, paragraph_id: $paragraph_id})
+            RETURN p.text AS text,
+                   p.short AS short,
+                   p.source_id AS source_id,
+                   p.paragraph_id AS paragraph_id
+            """,
+            source_id=source_id,
+            paragraph_id=paragraph_id,
+        )
+        record = result.single()
+        return dict(record) if record else None
+
+
 def resolve_doc_id(doc_ref: str) -> Optional[str]:
     """Resolve a doc reference (id, alias, or name) to a canonical doc_id."""
     if not doc_ref:
@@ -608,6 +628,24 @@ def register_tools(mcp: FastMCP) -> None:
             "entities": entities,
             "relations": relations,
         }
+
+    @mcp.tool()
+    def get_paragraph_text(
+        source_id: str,
+        paragraph_id: int,
+    ) -> Dict[str, Any]:
+        """Fetch a paragraph's text by source_id + paragraph_id from Neo4j."""
+        if not source_id:
+            return {"warning": "source_id is required."}
+        record = fetch_paragraph_by_source(source_id, paragraph_id)
+        if not record:
+            return {
+                "source_id": source_id,
+                "paragraph_id": paragraph_id,
+                "text": None,
+                "warning": "Paragraph not found.",
+            }
+        return record
 
     def query_graph_rag_auto(
         query: str,

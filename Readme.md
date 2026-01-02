@@ -104,6 +104,7 @@ http://127.0.0.1:8789/mcp
 - `query_graph_rag_langextract(query, top_k, source_id, collection, include_entities, include_relations, expand_related, related_k, entity_types, max_passage_chars)`
 - `list_source_ids(limit)`
 - `list_qdrant_collections()`
+- `get_paragraph_text(source_id, paragraph_id)`
 
 ## Ingest flow (GraphRAG LangExtract)
 
@@ -157,6 +158,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--raw-text`, or `
 - `--gliner-labels`: Comma-separated labels or path to text file (one label per line).
 - `--gliner-threshold`: GLiNER confidence threshold (default: `0.3`).
 - `--gliner-batch-size`: Batch size for GLiNER extraction (default: `8`).
+- `--no-batch`: Disable batching for GLiNER and Neo4j (sequential processing).
 - `--langextract-model-id`: Override `LANGEXTRACT_MODEL_ID` for LangExtract.
 - `--langextract-model-url`: Override `LANGEXTRACT_MODEL_URL` (e.g., Ollama URL).
 - `--llm-debug`: Print raw LLM output and log to `logs/langextract_raw.log`.
@@ -196,6 +198,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--raw-text`, or `
 | Entity | `--gliner-labels` | Labels (CSV or file path) | `PERSON,ORG,PRODUCT,GPE,DATE,TECH,CRYPTO,STANDARD` |
 | Entity | `--gliner-threshold` | GLiNER confidence threshold | `0.3` |
 | Entity | `--gliner-batch-size` | GLiNER extraction batch size | `8` |
+| Entity | `--no-batch` | Disable batching (sequential processing) | `false` |
 | Entity | `--langextract-model-id` | Override LangExtract model id | env `LANGEXTRACT_MODEL_ID` |
 | Entity | `--langextract-model-url` | Override LangExtract URL | env `LANGEXTRACT_MODEL_URL` |
 | LLM | `--llm-debug` | Print raw LLM output | `false` |
@@ -229,6 +232,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--raw-text`, or `
 - `--gliner-labels`: Comma-separated labels or path to text file (one label per line).
 - `--gliner-threshold`: GLiNER confidence threshold (default: `0.3`).
 - `--gliner-batch-size`: Batch size for GLiNER extraction (default: `8`).
+- `--no-batch`: Disable batching for GLiNER and Neo4j (sequential processing).
 - `--langextract-model-id`: Override `LANGEXTRACT_MODEL_ID` for LangExtract.
 - `--langextract-model-url`: Override `LANGEXTRACT_MODEL_URL` (e.g., Ollama URL).
 - `--llm-debug`: Print raw LLM output and log to `logs/langextract_raw.log`.
@@ -252,11 +256,22 @@ python graphrag_ingest_langextract.py \
   --gliner-model-name urchade/gliner_mediumv2 \
   --gliner-labels gliner/labels_digital_key.txt \
   --gliner-threshold 0.35 \
-  --gliner-batch-size 8 \
-  --neo4j-batch-size 50 \
+  --gliner-batch-size 1 \
+  --neo4j-batch-size 1 \
   --neo4j-pass neo4j_pass
 ```
 
+```bash
+python graphrag_ingest_langextract.py \
+  --folder /path/to/folder \
+  --entity-provider gliner \
+  --gliner-model-name urchade/gliner_mediumv2 \
+  --gliner-labels gliner/labels_digital_key.txt \
+  --gliner-threshold 0.35 \
+  --gliner-batch-size 1 \
+  --no-batch \
+  --neo4j-pass neo4j_pass
+```
 ### Example (LangExtract + Ollama)
 
 ```bash
@@ -305,6 +320,12 @@ python graphrag_ingest_langextract.py \
   --entity-provider langextract \
   --langextract-model-id gpt-4o \
   --neo4j-pass neo4j_pass
+```
+
+### Example (Reset Neo4j + Qdrant)
+
+```bash
+python 0_reset_all.py --neo4j-pass neo4j_pass
 ```
 
 ## Query flow (GraphRAG LangExtract)

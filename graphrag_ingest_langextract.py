@@ -434,6 +434,10 @@ def process_text(
     if args.entity_provider == "gliner" and gliner_model is None:
         gliner_model = build_gliner_model(args.gliner_model_resolved)
     gliner_labels = parse_gliner_labels(args.gliner_labels)
+    use_gliner_batch = args.entity_provider == "gliner" and not args.no_batch
+    if args.no_batch:
+        args.gliner_batch_size = 1
+        args.neo4j_batch_size = 1
 
     paragraphs = split_paragraphs(raw_text, args.max_paragraph_chars)
     print(f"Chunked into {len(paragraphs)} paragraphs.")
@@ -476,7 +480,7 @@ def process_text(
             continue
         long_paragraphs.append((idx, paragraph))
 
-    if args.entity_provider == "gliner" and long_paragraphs:
+    if use_gliner_batch and long_paragraphs:
         batch_size = max(1, args.gliner_batch_size)
         for start in range(0, len(long_paragraphs), batch_size):
             batch_items = long_paragraphs[start : start + batch_size]
@@ -589,6 +593,11 @@ def main() -> None:
         type=int,
         default=8,
         help="Batch size for GLiNER entity extraction.",
+    )
+    parser.add_argument(
+        "--no-batch",
+        action="store_true",
+        help="Disable batching for GLiNER and Neo4j (sequential processing).",
     )
     parser.add_argument("--langextract-model-id", default=os.getenv("LANGEXTRACT_MODEL_ID"))
     parser.add_argument("--langextract-model-url", default=os.getenv("LANGEXTRACT_MODEL_URL"))
