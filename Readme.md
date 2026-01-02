@@ -19,7 +19,7 @@ The default entity model is `gliner_medium-v2.1`.
 - Local/offline (recommended):
 
 ```bash
-export GLINER_MODEL_PATH=/Users/hieplq1.rpm/tool/ai/gliner_medium-v2.1
+export GLINER_MODEL_PATH=/Users/youruser/tool/ai/gliner_medium-v2.1
 ```
 
 - Or use model name (download from Hugging Face):
@@ -38,7 +38,7 @@ GLINER_MODEL_NAME=urchade/gliner_mediumv2
 If your environment blocks Hugging Face downloads, set a local path:
 
 ```bash
-export EMBEDDING_MODEL_PATH=/Users/hieplq1.rpm/tool/ai/all-MiniLM-L6-v2
+export EMBEDDING_MODEL_PATH=/Users/youruser/tool/ai/all-MiniLM-L6-v2
 ```
 
 When set, `mcp_graph_rag.py` will load embeddings from `EMBEDDING_MODEL_PATH`.
@@ -50,15 +50,15 @@ Create `.env` at the repo root:
 ```
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
-NEO4J_PASS=abcd1234
+NEO4J_PASS=neo4j_pass
 QDRANT_HOST=localhost
 QDRANT_PORT=6333
 QDRANT_COLLECTION=graphrag_entities
 
 EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
-EMBEDDING_MODEL_PATH=/Users/hieplq1.rpm/tool/ai/all-MiniLM-L6-v2
+EMBEDDING_MODEL_PATH=/Users/youruser/tool/ai/all-MiniLM-L6-v2
 GLINER_MODEL_NAME=urchade/gliner_mediumv2
-GLINER_MODEL_PATH=/Users/hieplq1.rpm/tool/ai/gliner_medium-v2.1
+GLINER_MODEL_PATH=/Users/youruser/tool/ai/gliner_medium-v2.1
 EMBEDDING_LOCAL_ONLY=1
 GLINER_LOCAL_ONLY=1
 HF_HUB_OFFLINE=1
@@ -246,7 +246,7 @@ python graphrag_ingest_langextract.py \
   --gliner-model-name urchade/gliner_mediumv2 \
   --gliner-labels gliner/labels_digital_key.txt \
   --gliner-threshold 0.35 \
-  --neo4j-pass abcd1234
+  --neo4j-pass neo4j_pass
 ```
 
 ### Example (LangExtract + Ollama)
@@ -257,7 +257,7 @@ python graphrag_ingest_langextract.py \
   --entity-provider langextract \
   --langextract-model-id gemma2:2b \
   --langextract-model-url http://localhost:11434 \
-  --neo4j-pass abcd1234
+  --neo4j-pass neo4j_pass
 ```
 
 ### Example (LangExtract + Gemini)
@@ -269,7 +269,7 @@ python graphrag_ingest_langextract.py \
   --pdf /path/to/file.pdf \
   --entity-provider langextract \
   --langextract-model-id gemini-2.5-flash \
-  --neo4j-pass abcd1234
+  --neo4j-pass neo4j_pass
 ```
 
 ### Example (LangExtract + OpenAI)
@@ -281,7 +281,7 @@ python graphrag_ingest_langextract.py \
   --pdf /path/to/file.pdf \
   --entity-provider langextract \
   --langextract-model-id gpt-4o \
-  --neo4j-pass abcd1234
+  --neo4j-pass neo4j_pass
 ```
 
 ### Example (LangExtract + Azure OpenAI)
@@ -296,7 +296,7 @@ python graphrag_ingest_langextract.py \
   --pdf /path/to/file.pdf \
   --entity-provider langextract \
   --langextract-model-id gpt-4o \
-  --neo4j-pass abcd1234
+  --neo4j-pass neo4j_pass
 ```
 
 ## Query flow (GraphRAG LangExtract)
