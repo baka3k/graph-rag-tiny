@@ -506,9 +506,9 @@ def process_text(
                 gliner_model=gliner_model,
             )
             for (idx, paragraph), entities in zip(batch_items, batch_entities, strict=True):
-        nodes, relations = build_graph_components_from_entities(
-            entities, [], merge_entities=merge_entities
-        )
+                nodes, relations = build_graph_components_from_entities(
+                    entities, [], merge_entities=merge_entities
+                )
                 print(f"Paragraph {idx + 1}/{len(paragraphs)}: extracted {len(nodes)} entities.")
                 neo4j_batch.append(
                     {
@@ -559,9 +559,14 @@ def process_text(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--pdf", help="Path to PDF")
-    parser.add_argument("--text-file", help="Path to UTF-8 text file")
+    parser.add_argument("--text-file", help="Path to UTF-8 text file (.txt)")
+    parser.add_argument("--md", help="Path to UTF-8 Markdown file (.md)")
+    parser.add_argument("--docx", help="Path to Word document (.docx)")
+    parser.add_argument("--pptx", help="Path to PowerPoint file (.pptx)")
     parser.add_argument("--raw-text", help="Raw text input")
-    parser.add_argument("--folder", help="Folder to scan for .pdf/.txt files (recursive)")
+    parser.add_argument(
+        "--folder", help="Folder to scan for .pdf/.txt/.md/.docx/.pptx files (recursive)"
+    )
     parser.add_argument("--source-id", default=None, help="Custom source identifier")
     parser.add_argument("--collection", default="graphrag_entities")
     parser.add_argument("--embedding-model", default=None)
@@ -647,9 +652,19 @@ def main() -> None:
         gliner_model_choice = args.gliner_model_name
     args.gliner_model_resolved = gliner_model_choice
 
-    inputs = [bool(args.pdf), bool(args.text_file), bool(args.raw_text), bool(args.folder)]
+    inputs = [
+        bool(args.pdf),
+        bool(args.text_file),
+        bool(args.md),
+        bool(args.docx),
+        bool(args.pptx),
+        bool(args.raw_text),
+        bool(args.folder),
+    ]
     if sum(inputs) != 1:
-        raise SystemExit("Provide exactly one of --pdf, --text-file, --raw-text, or --folder.")
+        raise SystemExit(
+            "Provide exactly one of --pdf, --text-file, --md, --docx, --pptx, --raw-text, or --folder."
+        )
 
     if args.llm_debug:
         os.environ["LLM_DEBUG"] = "1"
@@ -722,6 +737,33 @@ def main() -> None:
             raise FileNotFoundError(text_path)
         raw_text = read_text_file(text_path)
         source_id = args.source_id or text_path.stem
+        process_text(raw_text, source_id, args, driver, qdrant, embedder)
+        return
+    
+    if args.md:
+        md_path = Path(args.md)
+        if not md_path.exists():
+            raise FileNotFoundError(md_path)
+        raw_text = read_text_file(md_path)
+        source_id = args.source_id or md_path.stem
+        process_text(raw_text, source_id, args, driver, qdrant, embedder)
+        return
+
+    if args.docx:
+        docx_path = Path(args.docx)
+        if not docx_path.exists():
+            raise FileNotFoundError(docx_path)
+        raw_text = read_docx_text(docx_path)
+        source_id = args.source_id or docx_path.stem
+        process_text(raw_text, source_id, args, driver, qdrant, embedder)
+        return
+
+    if args.pptx:
+        pptx_path = Path(args.pptx)
+        if not pptx_path.exists():
+            raise FileNotFoundError(pptx_path)
+        raw_text = read_pptx_text(pptx_path)
+        source_id = args.source_id or pptx_path.stem
         process_text(raw_text, source_id, args, driver, qdrant, embedder)
         return
 
