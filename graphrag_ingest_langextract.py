@@ -10,6 +10,7 @@ from neo4j import GraphDatabase
 from pypdf import PdfReader
 from docx import Document
 from pptx import Presentation
+from openpyxl import load_workbook
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 from sentence_transformers import SentenceTransformer
@@ -71,6 +72,24 @@ def read_pptx_text(pptx_path: Path) -> str:
                 if stripped:
                     parts.append(stripped)
     return "\n\n".join(parts)
+
+
+def read_xlsx_text(xlsx_path: Path) -> str:
+    workbook = load_workbook(filename=str(xlsx_path), data_only=True, read_only=True)
+    parts = []
+    for sheet in workbook.worksheets:
+        parts.append(f"Sheet: {sheet.title}")
+        for row in sheet.iter_rows(values_only=True):
+            cells = []
+            for value in row:
+                if value is None:
+                    continue
+                text = str(value).strip()
+                if text:
+                    cells.append(text)
+            if cells:
+                parts.append("\t".join(cells))
+    return "\n".join(parts).strip()
 
 
 def split_paragraphs(text: str, max_chars: int) -> List[str]:
@@ -404,7 +423,14 @@ def _safe_source_id(base: Path, file_path: Path) -> str:
 def _iter_input_files(folder: Path) -> List[Path]:
     files = []
     for path in folder.rglob("*"):
-        if path.is_file() and path.suffix.lower() in {".pdf", ".txt", ".md", ".docx", ".pptx"}:
+        if path.is_file() and path.suffix.lower() in {
+            ".pdf",
+            ".txt",
+            ".md",
+            ".docx",
+            ".pptx",
+            ".xlsx",
+        }:
             files.append(path)
     return sorted(files)
 
@@ -417,6 +443,8 @@ def _read_input_text(file_path: Path) -> str:
         return read_docx_text(file_path)
     if suffix == ".pptx":
         return read_pptx_text(file_path)
+    if suffix == ".xlsx":
+        return read_xlsx_text(file_path)
     return read_text_file(file_path)
 
 
@@ -563,9 +591,11 @@ def main() -> None:
     parser.add_argument("--md", help="Path to UTF-8 Markdown file (.md)")
     parser.add_argument("--docx", help="Path to Word document (.docx)")
     parser.add_argument("--pptx", help="Path to PowerPoint file (.pptx)")
+    parser.add_argument("--xlsx", help="Path to Excel file (.xlsx)")
     parser.add_argument("--raw-text", help="Raw text input")
     parser.add_argument(
-        "--folder", help="Folder to scan for .pdf/.txt/.md/.docx/.pptx files (recursive)"
+        "--folder",
+        help="Folder to scan for .pdf/.txt/.md/.docx/.pptx/.xlsx files (recursive)",
     )
     parser.add_argument("--source-id", default=None, help="Custom source identifier")
     parser.add_argument("--collection", default="graphrag_entities")
@@ -658,12 +688,13 @@ def main() -> None:
         bool(args.md),
         bool(args.docx),
         bool(args.pptx),
+        bool(args.xlsx),
         bool(args.raw_text),
         bool(args.folder),
     ]
     if sum(inputs) != 1:
         raise SystemExit(
-            "Provide exactly one of --pdf, --text-file, --md, --docx, --pptx, --raw-text, or --folder."
+            "Provide exactly one of --pdf, --text-file, --md, --docx, --pptx, --xlsx, --raw-text, or --folder."
         )
 
     if args.llm_debug:
@@ -764,6 +795,15 @@ def main() -> None:
             raise FileNotFoundError(pptx_path)
         raw_text = read_pptx_text(pptx_path)
         source_id = args.source_id or pptx_path.stem
+        process_text(raw_text, source_id, args, driver, qdrant, embedder)
+        return
+
+    if args.xlsx:
+        xlsx_path = Path(args.xlsx)
+        if not xlsx_path.exists():
+            raise FileNotFoundError(xlsx_path)
+        raw_text = read_xlsx_text(xlsx_path)
+        source_id = args.source_id or xlsx_path.stem
         process_text(raw_text, source_id, args, driver, qdrant, embedder)
         return
 

@@ -112,7 +112,7 @@ http://127.0.0.1:8789/mcp
 
 This command:
 
-- Reads input (`--pdf`, `--text-file`, `--md`, `--docx`, `--pptx`, `--raw-text`, or `--folder`).
+- Reads input (`--pdf`, `--text-file`, `--md`, `--docx`, `--pptx`, `--xlsx`, `--raw-text`, or `--folder`).
 - Splits text into paragraphs and builds embeddings per paragraph.
 - Calls LangExtract to extract entities and relations.
 - Stores data in:
@@ -130,7 +130,7 @@ input -> chunk/paragraph -> embeddings -> LangExtract -> Qdrant(payload+vectors)
 
 ## `graphrag_ingest_langextract.py` parameters (full list)
 
-Exactly one input source is required: `--pdf`, `--text-file`, `--md`, `--docx`, `--pptx`, `--raw-text`, or `--folder`.
+Exactly one input source is required: `--pdf`, `--text-file`, `--md`, `--docx`, `--pptx`, `--xlsx`, `--raw-text`, or `--folder`.
 
 ### Grouped reference
 
@@ -140,8 +140,9 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--md`, `--docx`, 
 - `--md`: Path to a UTF-8 Markdown file (.md).
 - `--docx`: Path to a Word document (.docx).
 - `--pptx`: Path to a PowerPoint file (.pptx).
+- `--xlsx`: Path to an Excel file (.xlsx).
 - `--raw-text`: Raw text input string (quoted).
-- `--folder`: Folder to scan recursively for `.pdf`, `.txt`, `.md`, `.docx`, and `.pptx`.
+- `--folder`: Folder to scan recursively for `.pdf`, `.txt`, `.md`, `.docx`, `.pptx`, and `.xlsx`.
 - `--source-id`: Override `source_id` stored in Qdrant payload and Neo4j.
 
 **Paragraphing + embeddings**
@@ -188,8 +189,9 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--md`, `--docx`, 
 | Input | `--md` | Path to a UTF-8 Markdown file (.md) | `None` |
 | Input | `--docx` | Path to a Word document (.docx) | `None` |
 | Input | `--pptx` | Path to a PowerPoint file (.pptx) | `None` |
+| Input | `--xlsx` | Path to an Excel file (.xlsx) | `None` |
 | Input | `--raw-text` | Raw text input string | `None` |
-| Input | `--folder` | Folder to scan recursively for `.pdf`, `.txt`, `.md`, `.docx`, and `.pptx` | `None` |
+| Input | `--folder` | Folder to scan recursively for `.pdf`, `.txt`, `.md`, `.docx`, `.pptx`, and `.xlsx` | `None` |
 | Input | `--source-id` | Override `source_id` stored in Qdrant/Neo4j | `None` |
 | Embed | `--collection` | Qdrant collection name | `graphrag_entities` |
 | Embed | `--embedding-model` | Override embedding model name/path | `None` |
@@ -226,8 +228,9 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--md`, `--docx`, 
 - `--md`: Path to a UTF-8 Markdown file (.md).
 - `--docx`: Path to a Word document (.docx).
 - `--pptx`: Path to a PowerPoint file (.pptx).
+- `--xlsx`: Path to an Excel file (.xlsx).
 - `--raw-text`: Raw text input string (quoted).
-- `--folder`: Folder to scan recursively for `.pdf`, `.txt`, `.md`, `.docx`, and `.pptx`.
+- `--folder`: Folder to scan recursively for `.pdf`, `.txt`, `.md`, `.docx`, `.pptx`, and `.xlsx`.
 - `--source-id`: Override `source_id` stored in Qdrant payload and Neo4j.
 - `--collection`: Qdrant collection name (default: `graphrag_entities`).
 - `--embedding-model`: Override embedding model name/path.
@@ -301,6 +304,10 @@ python graphrag_ingest_langextract.py --pptx /path/to/file.pptx --neo4j-pass neo
 
 ```bash
 python graphrag_ingest_langextract.py --text-file /path/to/file.txt --neo4j-pass neo4j_pass
+```
+
+```bash
+python graphrag_ingest_langextract.py --xlsx /path/to/file.xlsx --neo4j-pass neo4j_pass
 ```
 ### Example (LangExtract + Ollama)
 

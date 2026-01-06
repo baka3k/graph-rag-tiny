@@ -9,6 +9,7 @@ google-generativeai
 pypdf
 python-docx
 python-pptx
+openpyxl
 sentence-transformers
 spacy
 fastmcp
