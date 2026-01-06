@@ -329,7 +329,11 @@ if __name__ == "__main__":
         signal.signal(signal.SIGQUIT, _handle_sigint)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--transport", choices=["stdio", "sse", "streamable-http"], default="stdio")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "sse", "streamable-http"],
+        default="streamable-http",
+    )
     parser.add_argument("--host", default=os.getenv("FASTMCP_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.getenv("FASTMCP_PORT", "8789")))
     parser.add_argument(
