@@ -117,7 +117,7 @@ This command:
 - Calls LangExtract to extract entities and relations.
 - Stores data in:
   - **Qdrant**: passage + embedding (payload includes `source_id`, `paragraph_id`, `entity_ids`).
-  - **Neo4j**: `Document`, `Paragraph`, `Entity`, and their relationships.
+  - **Neo4j**: `Document`, `Paragraph`, `Entity`, and their relationships (entities merge by normalized name+type).
 
 Result: after ingest, you can call `query_graph_rag_langextract` and use the `entity_ids` bridge to expand context via Neo4j.
 
@@ -158,6 +158,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--raw-text`, or `
 - `--gliner-labels`: Comma-separated labels or path to text file (one label per line).
 - `--gliner-threshold`: GLiNER confidence threshold (default: `0.3`).
 - `--gliner-batch-size`: Batch size for GLiNER extraction (default: `8`).
+- `--no-entity-merge`: Do not merge entities across paragraphs (per-paragraph IDs).
 - `--no-batch`: Disable batching for GLiNER and Neo4j (sequential processing).
 - `--langextract-model-id`: Override `LANGEXTRACT_MODEL_ID` for LangExtract.
 - `--langextract-model-url`: Override `LANGEXTRACT_MODEL_URL` (e.g., Ollama URL).
@@ -198,6 +199,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--raw-text`, or `
 | Entity | `--gliner-labels` | Labels (CSV or file path) | `PERSON,ORG,PRODUCT,GPE,DATE,TECH,CRYPTO,STANDARD` |
 | Entity | `--gliner-threshold` | GLiNER confidence threshold | `0.3` |
 | Entity | `--gliner-batch-size` | GLiNER extraction batch size | `8` |
+| Entity | `--no-entity-merge` | Do not merge entities across paragraphs | `false` |
 | Entity | `--no-batch` | Disable batching (sequential processing) | `false` |
 | Entity | `--langextract-model-id` | Override LangExtract model id | env `LANGEXTRACT_MODEL_ID` |
 | Entity | `--langextract-model-url` | Override LangExtract URL | env `LANGEXTRACT_MODEL_URL` |
@@ -232,6 +234,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--raw-text`, or `
 - `--gliner-labels`: Comma-separated labels or path to text file (one label per line).
 - `--gliner-threshold`: GLiNER confidence threshold (default: `0.3`).
 - `--gliner-batch-size`: Batch size for GLiNER extraction (default: `8`).
+- `--no-entity-merge`: Do not merge entities across paragraphs (per-paragraph IDs).
 - `--no-batch`: Disable batching for GLiNER and Neo4j (sequential processing).
 - `--langextract-model-id`: Override `LANGEXTRACT_MODEL_ID` for LangExtract.
 - `--langextract-model-url`: Override `LANGEXTRACT_MODEL_URL` (e.g., Ollama URL).
