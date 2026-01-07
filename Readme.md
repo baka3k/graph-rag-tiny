@@ -77,8 +77,18 @@ LANGEXTRACT_MODEL_ID=gemini-2.5-flash
 ## Run MCP server
 
 ```bash
-python mcp_graph_rag.py --transport streamable-http
+python mcp_graph_rag.py \
+  --host 127.0.0.1 \
+  --port 8789 \
+  --transport streamable-http \
+  --path /mcp
+
+or
+
+python mcp_graph_rag.py --host 127.0.0.1 --port 8789 --transport streamable-http --path /mcp
 ```
+
+Defaults are the values shown above if flags are omitted.
 
 Endpoint:
 
@@ -135,6 +145,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--md`, `--docx`, 
 ### Grouped reference
 
 **Input**
+
 - `--pdf`: Path to a single PDF file.
 - `--text-file`: Path to a UTF-8 text file (.txt).
 - `--md`: Path to a UTF-8 Markdown file (.md).
@@ -146,6 +157,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--md`, `--docx`, 
 - `--source-id`: Override `source_id` stored in Qdrant payload and Neo4j.
 
 **Paragraphing + embeddings**
+
 - `--collection`: Qdrant collection name (default: `graphrag_entities`).
 - `--embedding-model`: Override embedding model name/path.
 - `--max-paragraph-chars`: Max chars per paragraph (default: `1200`).
@@ -153,6 +165,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--md`, `--docx`, 
 - `--skip-llm-short`: Skip LLM for short paragraphs, still store in Qdrant.
 
 **Entity extraction**
+
 - `--entity-provider`: Entity extractor: `spacy`, `gliner`, `gemini`, or `langextract` (default: `gliner`).
 - `--spacy-model`: spaCy model name (default: `en_core_web_sm`).
 - `--ruler-json`: Path to spaCy `EntityRuler` JSON.
@@ -173,6 +186,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--md`, `--docx`, 
 - `--llm-retry-backoff`: Backoff seconds between LLM retries.
 
 **Neo4j + Qdrant**
+
 - `--neo4j-uri`: Neo4j URI (default from `NEO4J_URI`).
 - `--neo4j-user`: Neo4j user (default from `NEO4J_USER`).
 - `--neo4j-pass`: Neo4j password (default from `NEO4J_PASS`).
@@ -184,48 +198,48 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--md`, `--docx`, 
 
 ### Compact table
 
-| Group | Parameter | Description | Default |
-| --- | --- | --- | --- |
-| Input | `--pdf` | Path to a single PDF file | `None` |
-| Input | `--text-file` | Path to a UTF-8 text file (.txt) | `None` |
-| Input | `--md` | Path to a UTF-8 Markdown file (.md) | `None` |
-| Input | `--docx` | Path to a Word document (.docx) | `None` |
-| Input | `--pptx` | Path to a PowerPoint file (.pptx) | `None` |
-| Input | `--xlsx` | Path to an Excel file (.xlsx) | `None` |
-| Input | `--raw-text` | Raw text input string | `None` |
-| Input | `--folder` | Folder to scan recursively for `.pdf`, `.txt`, `.md`, `.docx`, `.pptx`, and `.xlsx` | `None` |
-| Input | `--source-id` | Override `source_id` stored in Qdrant/Neo4j | `None` |
-| Embed | `--collection` | Qdrant collection name | `graphrag_entities` |
-| Embed | `--embedding-model` | Override embedding model name/path | `None` |
-| Embed | `--max-paragraph-chars` | Max chars per paragraph | `1200` |
-| Embed | `--min-paragraph-chars` | Min chars per paragraph | `150` |
-| Embed | `--skip-llm-short` | Skip LLM for short paragraphs | `false` |
-| Entity | `--entity-provider` | `spacy`, `gliner`, `gemini`, `langextract` | `gliner` |
-| Entity | `--spacy-model` | spaCy model name | `en_core_web_sm` |
-| Entity | `--ruler-json` | spaCy EntityRuler JSON | `None` |
-| Entity | `--gliner-model-name` | GLiNER model name | `urchade/gliner_mediumv2` |
-| Entity | `--gliner-model-path` | Local GLiNER model path | env `GLINER_MODEL_PATH` |
-| Entity | `--gliner-model` | Deprecated alias | `None` |
-| Entity | `--gliner-labels` | Labels (CSV or file path) | `PERSON,ORG,PRODUCT,GPE,DATE,TECH,CRYPTO,STANDARD` |
-| Entity | `--gliner-threshold` | GLiNER confidence threshold | `0.3` |
-| Entity | `--gliner-batch-size` | GLiNER extraction batch size | `8` |
-| Entity | `--no-entity-merge` | Do not merge entities across paragraphs | `false` |
-| Entity | `--entity-normalize-mode` | Entity normalization strength | `aggressive` |
-| Entity | `--no-batch` | Disable batching (sequential processing) | `true` |
-| Entity | `--batch` | Enable batching | `false` |
-| Entity | `--langextract-model-id` | Override LangExtract model id | env `LANGEXTRACT_MODEL_ID` |
-| Entity | `--langextract-model-url` | Override LangExtract URL | env `LANGEXTRACT_MODEL_URL` |
-| LLM | `--llm-debug` | Print raw LLM output | `false` |
-| LLM | `--llm-retry-count` | Retry count on parse fail | `None` |
-| LLM | `--llm-retry-backoff` | Backoff seconds | `None` |
-| Neo4j | `--neo4j-uri` | Neo4j URI | env `NEO4J_URI` |
-| Neo4j | `--neo4j-user` | Neo4j user | env `NEO4J_USER` |
-| Neo4j | `--neo4j-pass` | Neo4j password | env `NEO4J_PASS` |
-| Neo4j | `--neo4j-batch-size` | Paragraphs per batch write | `50` |
-| Qdrant | `--qdrant-url` | Qdrant URL (overrides host/port) | env `QDRANT_URL` |
-| Qdrant | `--qdrant-host` | Qdrant host | env `QDRANT_HOST` |
-| Qdrant | `--qdrant-port` | Qdrant port | env `QDRANT_PORT` |
-| Qdrant | `--qdrant-api-key` | Qdrant API key | env `QDRANT_KEY` |
+| Group  | Parameter                 | Description                                                                         | Default                                            |
+| ------ | ------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Input  | `--pdf`                   | Path to a single PDF file                                                           | `None`                                             |
+| Input  | `--text-file`             | Path to a UTF-8 text file (.txt)                                                    | `None`                                             |
+| Input  | `--md`                    | Path to a UTF-8 Markdown file (.md)                                                 | `None`                                             |
+| Input  | `--docx`                  | Path to a Word document (.docx)                                                     | `None`                                             |
+| Input  | `--pptx`                  | Path to a PowerPoint file (.pptx)                                                   | `None`                                             |
+| Input  | `--xlsx`                  | Path to an Excel file (.xlsx)                                                       | `None`                                             |
+| Input  | `--raw-text`              | Raw text input string                                                               | `None`                                             |
+| Input  | `--folder`                | Folder to scan recursively for `.pdf`, `.txt`, `.md`, `.docx`, `.pptx`, and `.xlsx` | `None`                                             |
+| Input  | `--source-id`             | Override `source_id` stored in Qdrant/Neo4j                                         | `None`                                             |
+| Embed  | `--collection`            | Qdrant collection name                                                              | `graphrag_entities`                                |
+| Embed  | `--embedding-model`       | Override embedding model name/path                                                  | `None`                                             |
+| Embed  | `--max-paragraph-chars`   | Max chars per paragraph                                                             | `1200`                                             |
+| Embed  | `--min-paragraph-chars`   | Min chars per paragraph                                                             | `150`                                              |
+| Embed  | `--skip-llm-short`        | Skip LLM for short paragraphs                                                       | `false`                                            |
+| Entity | `--entity-provider`       | `spacy`, `gliner`, `gemini`, `langextract`                                          | `gliner`                                           |
+| Entity | `--spacy-model`           | spaCy model name                                                                    | `en_core_web_sm`                                   |
+| Entity | `--ruler-json`            | spaCy EntityRuler JSON                                                              | `None`                                             |
+| Entity | `--gliner-model-name`     | GLiNER model name                                                                   | `urchade/gliner_mediumv2`                          |
+| Entity | `--gliner-model-path`     | Local GLiNER model path                                                             | env `GLINER_MODEL_PATH`                            |
+| Entity | `--gliner-model`          | Deprecated alias                                                                    | `None`                                             |
+| Entity | `--gliner-labels`         | Labels (CSV or file path)                                                           | `PERSON,ORG,PRODUCT,GPE,DATE,TECH,CRYPTO,STANDARD` |
+| Entity | `--gliner-threshold`      | GLiNER confidence threshold                                                         | `0.3`                                              |
+| Entity | `--gliner-batch-size`     | GLiNER extraction batch size                                                        | `8`                                                |
+| Entity | `--no-entity-merge`       | Do not merge entities across paragraphs                                             | `false`                                            |
+| Entity | `--entity-normalize-mode` | Entity normalization strength                                                       | `aggressive`                                       |
+| Entity | `--no-batch`              | Disable batching (sequential processing)                                            | `true`                                             |
+| Entity | `--batch`                 | Enable batching                                                                     | `false`                                            |
+| Entity | `--langextract-model-id`  | Override LangExtract model id                                                       | env `LANGEXTRACT_MODEL_ID`                         |
+| Entity | `--langextract-model-url` | Override LangExtract URL                                                            | env `LANGEXTRACT_MODEL_URL`                        |
+| LLM    | `--llm-debug`             | Print raw LLM output                                                                | `false`                                            |
+| LLM    | `--llm-retry-count`       | Retry count on parse fail                                                           | `None`                                             |
+| LLM    | `--llm-retry-backoff`     | Backoff seconds                                                                     | `None`                                             |
+| Neo4j  | `--neo4j-uri`             | Neo4j URI                                                                           | env `NEO4J_URI`                                    |
+| Neo4j  | `--neo4j-user`            | Neo4j user                                                                          | env `NEO4J_USER`                                   |
+| Neo4j  | `--neo4j-pass`            | Neo4j password                                                                      | env `NEO4J_PASS`                                   |
+| Neo4j  | `--neo4j-batch-size`      | Paragraphs per batch write                                                          | `50`                                               |
+| Qdrant | `--qdrant-url`            | Qdrant URL (overrides host/port)                                                    | env `QDRANT_URL`                                   |
+| Qdrant | `--qdrant-host`           | Qdrant host                                                                         | env `QDRANT_HOST`                                  |
+| Qdrant | `--qdrant-port`           | Qdrant port                                                                         | env `QDRANT_PORT`                                  |
+| Qdrant | `--qdrant-api-key`        | Qdrant API key                                                                      | env `QDRANT_KEY`                                   |
 
 - `--pdf`: Path to a single PDF file.
 - `--text-file`: Path to a UTF-8 text file (.txt).
@@ -315,6 +329,7 @@ python graphrag_ingest_langextract.py --text-file /path/to/file.txt --neo4j-pass
 ```bash
 python graphrag_ingest_langextract.py --xlsx /path/to/file.xlsx --neo4j-pass neo4j_pass
 ```
+
 ### Example (LangExtract + Ollama)
 
 ```bash
@@ -377,8 +392,8 @@ python 0_reset_all.py --neo4j-pass neo4j_pass
 
 Two main steps:
 
-1) **Search Qdrant** with the query embedding to get top-k passages
-2) **Expand via Neo4j** using `entity_ids` from those passages
+1. **Search Qdrant** with the query embedding to get top-k passages
+2. **Expand via Neo4j** using `entity_ids` from those passages
 
 ### Where does it query, what data comes from each DB?
 
@@ -454,7 +469,7 @@ query_graph_rag_langextract(
 )
 ```
 
-``` 
+```
 query_graph_rag_langextract(
   query="zero trust policy for device identity",
   top_k=8,
@@ -475,9 +490,11 @@ query_graph_rag_langextract(
 ```
 
 Notes:
+
 - `graph_depth=2` helps expand to second-order neighbors for discovery-style queries.
 - `min_entity_occurrences=2` reduces noise by expanding only entities that appear in multiple top passages.
 - `rerank=true` is useful when you want better ordering of passages beyond vector score.
+
 # Graph RAG
 
 <img src="resources/neo4j.png" alt="GraphRAG LangExtract">

@@ -497,9 +497,16 @@ if __name__ == "__main__":
     parser.add_argument("--host", default=os.getenv("FASTMCP_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.getenv("FASTMCP_PORT", "8789")))
     parser.add_argument(
-        "--stream-path",
+        "--path",
+        dest="stream_path",
         default=os.getenv("FASTMCP_STREAMABLE_HTTP_PATH", "/mcp"),
         help="Streamable HTTP path",
+    )
+    parser.add_argument(
+        "--stream-path",
+        dest="stream_path",
+        default=os.getenv("FASTMCP_STREAMABLE_HTTP_PATH", "/mcp"),
+        help="Streamable HTTP path (deprecated, use --path)",
     )
     args = parser.parse_args()
 
