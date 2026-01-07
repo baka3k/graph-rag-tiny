@@ -138,6 +138,7 @@ def qdrant_search_entity_payload(
                 "source_id": h.payload.get("source_id"),
                 "paragraph_id": h.payload.get("paragraph_id"),
                 "entity_ids": h.payload.get("entity_ids") or [],
+                "entity_mentions": h.payload.get("entity_mentions") or [],
             }
         )
     return payloads
@@ -252,6 +253,62 @@ def fetch_relations_with_depth(
     return relations
 
 
+def _compute_heuristic_rerank_score(
+    passage: Dict[str, Any],
+    entity_types: List[str],
+    entity_weight: float,
+    type_weight: float,
+    confidence_weight: float,
+    length_penalty: float,
+) -> float:
+    base_score = passage.get("score") or 0.0
+    text = passage.get("text") or ""
+    mentions = passage.get("_entity_mentions") or []
+    unique_entities = set()
+    type_hits = 0
+    confidences: List[float] = []
+
+    for item in mentions:
+        entity_id = item.get("id") or item.get("name")
+        if entity_id:
+            unique_entities.add(entity_id)
+        if item.get("type") in entity_types:
+            type_hits += 1
+        conf = item.get("confidence")
+        if conf is not None:
+            confidences.append(float(conf))
+
+    avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
+    penalty = length_penalty * len(text) if length_penalty else 0.0
+    return (
+        base_score
+        + entity_weight * len(unique_entities)
+        + type_weight * type_hits
+        + confidence_weight * avg_conf
+        - penalty
+    )
+
+
+def _apply_heuristic_rerank(
+    passages: List[Dict[str, Any]],
+    entity_types: List[str],
+    entity_weight: float,
+    type_weight: float,
+    confidence_weight: float,
+    length_penalty: float,
+) -> List[Dict[str, Any]]:
+    for passage in passages:
+        passage["rerank_score"] = _compute_heuristic_rerank_score(
+            passage,
+            entity_types,
+            entity_weight,
+            type_weight,
+            confidence_weight,
+            length_penalty,
+        )
+    return sorted(passages, key=lambda row: row.get("rerank_score", 0.0), reverse=True)
+
+
 def fetch_paragraph_by_source(
     source_id: str,
     paragraph_id: int,
@@ -312,6 +369,11 @@ def register_tools(mcp: FastMCP) -> None:
         max_passage_chars: Optional[int] = None,
         min_score_to_expand: Optional[float] = None,
         min_entity_occurrences: Optional[int] = None,
+        rerank: bool = False,
+        rerank_entity_weight: float = 0.05,
+        rerank_type_weight: float = 0.1,
+        rerank_confidence_weight: float = 0.3,
+        rerank_length_penalty: float = 0.0002,
     ) -> Dict[str, Any]:
         """
         Query Qdrant for top-k passages with entity_ids payload, then fetch related
@@ -339,6 +401,7 @@ def register_tools(mcp: FastMCP) -> None:
                     "score": row.get("score"),
                     "source_id": row.get("source_id"),
                     "paragraph_id": row.get("paragraph_id"),
+                    "_entity_mentions": row.get("entity_mentions") or [],
                 }
             )
             entity_ids.extend(row.get("entity_ids") or [])
@@ -358,6 +421,21 @@ def register_tools(mcp: FastMCP) -> None:
                 entity_ids, entity_types, related_k, graph_depth
             )
 
+        if rerank:
+            passages = _apply_heuristic_rerank(
+                passages,
+                entity_types,
+                rerank_entity_weight,
+                rerank_type_weight,
+                rerank_confidence_weight,
+                rerank_length_penalty,
+            )
+            for passage in passages:
+                passage.pop("_entity_mentions", None)
+        else:
+            for passage in passages:
+                passage.pop("_entity_mentions", None)
+
         return {
             "query": query,
             "top_k": top_k,
@@ -366,6 +444,8 @@ def register_tools(mcp: FastMCP) -> None:
             "graph_depth": graph_depth,
             "min_score_to_expand": min_score_to_expand,
             "min_entity_occurrences": min_entity_occurrences,
+            "rerank_applied": rerank,
+            "rerank_strategy": "heuristic" if rerank else None,
             "passages": passages,
             "entities": entities,
             "relations": relations,

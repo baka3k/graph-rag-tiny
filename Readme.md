@@ -101,7 +101,7 @@ http://127.0.0.1:8789/mcp
 
 ## MCP tools
 
-- `query_graph_rag_langextract(query, top_k, source_id, collection, include_entities, include_relations, expand_related, related_k, graph_depth, entity_types, max_passage_chars, min_score_to_expand, min_entity_occurrences)`
+- `query_graph_rag_langextract(query, top_k, source_id, collection, include_entities, include_relations, expand_related, related_k, graph_depth, entity_types, max_passage_chars, min_score_to_expand, min_entity_occurrences, rerank, rerank_entity_weight, rerank_type_weight, rerank_confidence_weight, rerank_length_penalty)`
 - `list_source_ids(limit)`
 - `list_qdrant_collections()`
 - `get_paragraph_text(source_id, paragraph_id)`
@@ -386,6 +386,7 @@ Two main steps:
   - resolves entities by `entity_ids`,
   - optionally expands relations (`include_relations`, `expand_related`, `related_k`, `graph_depth`),
   - can gate expansion using `min_score_to_expand` / `min_entity_occurrences`.
+- Optional heuristic rerank can re-order passages using entity counts, types, confidence, and length penalty.
 
 ### Special points
 
@@ -394,6 +395,7 @@ Two main steps:
 - `entity_mentions` in Qdrant payload contains span/metadata when available.
 - Relation expansion is optional to balance speed vs depth.
 - Gating expansion: use `min_score_to_expand` and `min_entity_occurrences` to reduce noisy graph expansions.
+- Rerank: set `rerank=true` to re-order passages by heuristic signals.
 
 Pipeline (query):
 
@@ -443,6 +445,7 @@ query_graph_rag_langextract(
   graph_depth=1,
   min_score_to_expand=null,
   min_entity_occurrences=null,
+  rerank=false,
   related_k=50,
   max_passage_chars=800
 )
@@ -458,6 +461,11 @@ query_graph_rag_langextract(
   graph_depth=2,
   min_score_to_expand=0.25,
   min_entity_occurrences=2,
+  rerank=true,
+  rerank_entity_weight=0.05,
+  rerank_type_weight=0.1,
+  rerank_confidence_weight=0.3,
+  rerank_length_penalty=0.0002,
   related_k=80,
   max_passage_chars=900
 )
@@ -466,6 +474,7 @@ query_graph_rag_langextract(
 Notes:
 - `graph_depth=2` helps expand to second-order neighbors for discovery-style queries.
 - `min_entity_occurrences=2` reduces noise by expanding only entities that appear in multiple top passages.
+- `rerank=true` is useful when you want better ordering of passages beyond vector score.
 # Graph RAG
 
 <img src="resources/neo4j.png" alt="GraphRAG LangExtract">
@@ -481,5 +490,6 @@ Notes:
 ## Changelog (local)
 
 - Added graph expansion controls (`graph_depth`, `min_score_to_expand`, `min_entity_occurrences`) to query.
+- Added heuristic rerank controls (`rerank_*`) for passage ordering.
 - Ingest now stores entity metadata (confidence, span) in Neo4j `HAS_ENTITY` and Qdrant `entity_mentions`.
 - Added `--entity-normalize-mode` to control merge normalization strength.
