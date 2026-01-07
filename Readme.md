@@ -101,7 +101,7 @@ http://127.0.0.1:8789/mcp
 
 ## MCP tools
 
-- `query_graph_rag_langextract(query, top_k, source_id, collection, include_entities, include_relations, expand_related, related_k, entity_types, max_passage_chars)`
+- `query_graph_rag_langextract(query, top_k, source_id, collection, include_entities, include_relations, expand_related, related_k, graph_depth, entity_types, max_passage_chars, min_score_to_expand, min_entity_occurrences, rerank, rerank_entity_weight, rerank_type_weight, rerank_confidence_weight, rerank_length_penalty)`
 - `list_source_ids(limit)`
 - `list_qdrant_collections()`
 - `get_paragraph_text(source_id, paragraph_id)`
@@ -116,8 +116,8 @@ This command:
 - Splits text into paragraphs and builds embeddings per paragraph.
 - Calls LangExtract to extract entities and relations.
 - Stores data in:
-  - **Qdrant**: passage + embedding (payload includes `source_id`, `paragraph_id`, `entity_ids`).
-  - **Neo4j**: `Document`, `Paragraph`, `Entity`, and their relationships (entities merge by normalized name+type).
+  - **Qdrant**: passage + embedding (payload includes `source_id`, `paragraph_id`, `entity_ids`, `entity_mentions`).
+  - **Neo4j**: `Document`, `Paragraph`, `Entity`, and their relationships (entities merge by normalized name+type). `HAS_ENTITY` includes confidence + span metadata when available.
 
 Result: after ingest, you can call `query_graph_rag_langextract` and use the `entity_ids` bridge to expand context via Neo4j.
 
@@ -163,7 +163,9 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--md`, `--docx`, 
 - `--gliner-threshold`: GLiNER confidence threshold (default: `0.3`).
 - `--gliner-batch-size`: Batch size for GLiNER extraction (default: `8`).
 - `--no-entity-merge`: Do not merge entities across paragraphs (per-paragraph IDs).
+- `--entity-normalize-mode`: Entity normalization strength for merging (`basic` or `aggressive`, default: `aggressive`).
 - `--no-batch`: Disable batching for GLiNER and Neo4j (sequential processing).
+- `--batch`: Enable batching for GLiNER and Neo4j.
 - `--langextract-model-id`: Override `LANGEXTRACT_MODEL_ID` for LangExtract.
 - `--langextract-model-url`: Override `LANGEXTRACT_MODEL_URL` (e.g., Ollama URL).
 - `--llm-debug`: Print raw LLM output and log to `logs/langextract_raw.log`.
@@ -208,7 +210,9 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--md`, `--docx`, 
 | Entity | `--gliner-threshold` | GLiNER confidence threshold | `0.3` |
 | Entity | `--gliner-batch-size` | GLiNER extraction batch size | `8` |
 | Entity | `--no-entity-merge` | Do not merge entities across paragraphs | `false` |
-| Entity | `--no-batch` | Disable batching (sequential processing) | `false` |
+| Entity | `--entity-normalize-mode` | Entity normalization strength | `aggressive` |
+| Entity | `--no-batch` | Disable batching (sequential processing) | `true` |
+| Entity | `--batch` | Enable batching | `false` |
 | Entity | `--langextract-model-id` | Override LangExtract model id | env `LANGEXTRACT_MODEL_ID` |
 | Entity | `--langextract-model-url` | Override LangExtract URL | env `LANGEXTRACT_MODEL_URL` |
 | LLM | `--llm-debug` | Print raw LLM output | `false` |
@@ -247,7 +251,9 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--md`, `--docx`, 
 - `--gliner-threshold`: GLiNER confidence threshold (default: `0.3`).
 - `--gliner-batch-size`: Batch size for GLiNER extraction (default: `8`).
 - `--no-entity-merge`: Do not merge entities across paragraphs (per-paragraph IDs).
+- `--entity-normalize-mode`: Entity normalization strength for merging (`basic` or `aggressive`, default: `aggressive`).
 - `--no-batch`: Disable batching for GLiNER and Neo4j (sequential processing).
+- `--batch`: Enable batching for GLiNER and Neo4j.
 - `--langextract-model-id`: Override `LANGEXTRACT_MODEL_ID` for LangExtract.
 - `--langextract-model-url`: Override `LANGEXTRACT_MODEL_URL` (e.g., Ollama URL).
 - `--llm-debug`: Print raw LLM output and log to `logs/langextract_raw.log`.
@@ -378,16 +384,21 @@ Two main steps:
 
 - **Qdrant**: embeddings + passages. The tool:
   - finds top-k passages,
-  - reads payload fields `source_id`, `paragraph_id`, `entity_ids`.
+  - reads payload fields `source_id`, `paragraph_id`, `entity_ids`, `entity_mentions`.
 - **Neo4j**: entities + relations. The tool:
   - resolves entities by `entity_ids`,
-  - optionally expands relations (`include_relations`, `expand_related`, `related_k`).
+  - optionally expands relations (`include_relations`, `expand_related`, `related_k`, `graph_depth`),
+  - can gate expansion using `min_score_to_expand` / `min_entity_occurrences`.
+- Optional heuristic rerank can re-order passages using entity counts, types, confidence, and length penalty.
 
 ### Special points
 
 - Uses `source_id` to link passages with Neo4j.
 - The bridge between Qdrant and Neo4j is **`entity_ids`** from LangExtract/GLiNER ingest.(you can choose another, such as spaCy)
+- `entity_mentions` in Qdrant payload contains span/metadata when available.
 - Relation expansion is optional to balance speed vs depth.
+- Gating expansion: use `min_score_to_expand` and `min_entity_occurrences` to reduce noisy graph expansions.
+- Rerank: set `rerank=true` to re-order passages by heuristic signals.
 
 Pipeline (query):
 
@@ -407,6 +418,25 @@ list_qdrant_collections()
 list_source_ids(limit=50)
 ```
 
+### Example ingest with normalization + metadata
+
+```bash
+python graphrag_ingest_langextract.py \
+  --folder ./data \
+  --entity-provider gliner \
+  --entity-normalize-mode aggressive \
+  --gliner-threshold 0.35 \
+  --collection graphrag_entities
+```
+
+```bash
+python graphrag_ingest_langextract.py \
+  --md ./docs/spec.md \
+  --entity-provider langextract \
+  --entity-normalize-mode basic \
+  --collection graphrag_entities
+```
+
 ```
 query_graph_rag_langextract(
   query="Digital Key encryption info",
@@ -415,10 +445,39 @@ query_graph_rag_langextract(
   source_id="my_doc",
   include_entities=true,
   include_relations=true,
+  graph_depth=1,
+  min_score_to_expand=null,
+  min_entity_occurrences=null,
+  rerank=false,
   related_k=50,
   max_passage_chars=800
 )
 ```
+
+``` 
+query_graph_rag_langextract(
+  query="zero trust policy for device identity",
+  top_k=8,
+  collection="graphrag_entities",
+  include_entities=true,
+  include_relations=true,
+  graph_depth=2,
+  min_score_to_expand=0.25,
+  min_entity_occurrences=2,
+  rerank=true,
+  rerank_entity_weight=0.05,
+  rerank_type_weight=0.1,
+  rerank_confidence_weight=0.3,
+  rerank_length_penalty=0.0002,
+  related_k=80,
+  max_passage_chars=900
+)
+```
+
+Notes:
+- `graph_depth=2` helps expand to second-order neighbors for discovery-style queries.
+- `min_entity_occurrences=2` reduces noise by expanding only entities that appear in multiple top passages.
+- `rerank=true` is useful when you want better ordering of passages beyond vector score.
 # Graph RAG
 
 <img src="resources/neo4j.png" alt="GraphRAG LangExtract">
@@ -430,3 +489,11 @@ query_graph_rag_langextract(
 # Use GraphRAG to create sequences diagram from Document
 
 <img src="resources/screenshot_2.png" alt="GraphRAG LangExtract">
+
+## Changelog (local)
+
+- Added graph expansion controls (`graph_depth`, `min_score_to_expand`, `min_entity_occurrences`) to query.
+- Added heuristic rerank controls (`rerank_*`) for passage ordering.
+- Ingest now stores entity metadata (confidence, span) in Neo4j `HAS_ENTITY` and Qdrant `entity_mentions`.
+- Added `--entity-normalize-mode` to control merge normalization strength.
+- Default ingest is now non-batch; use `--batch` to enable batching.
