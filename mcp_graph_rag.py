@@ -184,6 +184,74 @@ def fetch_relations_by_entity_ids(
         return [dict(r) for r in result]
 
 
+def _filter_entity_ids_for_expansion(
+    entity_ids: List[str],
+    payloads: List[Dict[str, Any]],
+    min_score_to_expand: Optional[float],
+    min_entity_occurrences: Optional[int],
+) -> List[str]:
+    if not entity_ids:
+        return []
+    if min_score_to_expand is not None:
+        scores = [row.get("score") for row in payloads if row.get("score") is not None]
+        if scores and max(scores) < min_score_to_expand:
+            return []
+    if min_entity_occurrences and min_entity_occurrences > 1:
+        counts: Dict[str, int] = {}
+        for row in payloads:
+            for entity_id in row.get("entity_ids") or []:
+                counts[entity_id] = counts.get(entity_id, 0) + 1
+        return [eid for eid in entity_ids if counts.get(eid, 0) >= min_entity_occurrences]
+    return entity_ids
+
+
+def fetch_relations_with_depth(
+    entity_ids: List[str],
+    entity_types: Optional[List[str]],
+    related_k: int,
+    depth: int,
+) -> List[Dict[str, Any]]:
+    if not entity_ids or related_k <= 0 or depth <= 0:
+        return []
+    relations: List[Dict[str, Any]] = []
+    seen_relations = set()
+    seen_entities = set(entity_ids)
+    frontier = list(entity_ids)
+    remaining = related_k
+
+    for _ in range(depth):
+        if not frontier or remaining <= 0:
+            break
+        step_relations = fetch_relations_by_entity_ids(
+            frontier, entity_types, remaining
+        )
+        new_frontier = set()
+        for rel in step_relations:
+            rel_key = (
+                rel.get("source_id"),
+                rel.get("relation"),
+                rel.get("target_id"),
+            )
+            if rel_key in seen_relations:
+                continue
+            seen_relations.add(rel_key)
+            relations.append(rel)
+            source_id = rel.get("source_id")
+            target_id = rel.get("target_id")
+            if source_id and source_id not in seen_entities:
+                new_frontier.add(source_id)
+            if target_id and target_id not in seen_entities:
+                new_frontier.add(target_id)
+
+        remaining = related_k - len(relations)
+        if not new_frontier:
+            break
+        seen_entities.update(new_frontier)
+        frontier = list(new_frontier)
+
+    return relations
+
+
 def fetch_paragraph_by_source(
     source_id: str,
     paragraph_id: int,
@@ -239,8 +307,11 @@ def register_tools(mcp: FastMCP) -> None:
         include_relations: bool = True,
         expand_related: bool = True,
         related_k: int = 50,
+        graph_depth: int = 1,
         entity_types: Optional[List[str]] = None,
         max_passage_chars: Optional[int] = None,
+        min_score_to_expand: Optional[float] = None,
+        min_entity_occurrences: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Query Qdrant for top-k passages with entity_ids payload, then fetch related
@@ -273,12 +344,18 @@ def register_tools(mcp: FastMCP) -> None:
             entity_ids.extend(row.get("entity_ids") or [])
 
         entity_ids = list(dict.fromkeys(entity_ids))
+        entity_ids = _filter_entity_ids_for_expansion(
+            entity_ids,
+            payloads,
+            min_score_to_expand=min_score_to_expand,
+            min_entity_occurrences=min_entity_occurrences,
+        )
 
         entities = fetch_entities_by_ids(entity_ids) if include_entities else []
         relations = []
         if include_relations and expand_related:
-            relations = fetch_relations_by_entity_ids(
-                entity_ids, entity_types, related_k
+            relations = fetch_relations_with_depth(
+                entity_ids, entity_types, related_k, graph_depth
             )
 
         return {
@@ -286,6 +363,9 @@ def register_tools(mcp: FastMCP) -> None:
             "top_k": top_k,
             "source_id": source_id,
             "collection": collection or QDRANT_COLLECTION,
+            "graph_depth": graph_depth,
+            "min_score_to_expand": min_score_to_expand,
+            "min_entity_occurrences": min_entity_occurrences,
             "passages": passages,
             "entities": entities,
             "relations": relations,

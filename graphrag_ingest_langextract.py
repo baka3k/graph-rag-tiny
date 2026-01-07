@@ -113,12 +113,21 @@ def _set_langextract_overrides(model_id: str | None, model_url: str | None) -> N
         os.environ["LANGEXTRACT_MODEL_URL"] = model_url
 
 
-def _normalize_entity_name(name: str) -> str:
-    return re.sub(r"\s+", " ", name.strip().lower())
+def _normalize_entity_name(name: str, mode: str = "aggressive") -> str:
+    cleaned = name.strip().lower()
+    if not cleaned:
+        return ""
+    cleaned = re.sub(r'^[\"`“”‘’\'()\[\]{}<>]+|[\"`“”‘’\'()\[\]{}<>]+$', "", cleaned)
+    cleaned = cleaned.replace("_", " ").replace("/", " ").replace("-", " ")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if mode == "aggressive":
+        cleaned = re.sub(r"[^0-9a-zA-Z+#. ]+", " ", cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
 
 
-def _entity_id(name: str, ent_type: str) -> str:
-    key = f"{ent_type}::{_normalize_entity_name(name)}"
+def _entity_id(name: str, ent_type: str, name_norm: str | None = None) -> str:
+    key = f"{ent_type}::{name_norm or _normalize_entity_name(name)}"
     return str(uuid.uuid5(uuid.NAMESPACE_URL, key))
 
 
@@ -130,6 +139,7 @@ def build_graph_components(
     gliner_labels: List[str] | None = None,
     gliner_threshold: float = 0.3,
     merge_entities: bool = True,
+    normalize_mode: str = "aggressive",
 ) -> Tuple[Dict[str, Dict[str, str]], List[Dict[str, str]]]:
     if provider == "spacy":
         doc = nlp(text)
@@ -146,13 +156,19 @@ def build_graph_components(
         entities, relations = extract_entities_gemini(text)
     else:
         entities, relations = extract_entities_langextract(text)
-    return build_graph_components_from_entities(entities, relations, merge_entities=merge_entities)
+    return build_graph_components_from_entities(
+        entities,
+        relations,
+        merge_entities=merge_entities,
+        normalize_mode=normalize_mode,
+    )
 
 
 def build_graph_components_from_entities(
     entities: List[Dict[str, str]],
     relations: List[Dict[str, str]],
     merge_entities: bool = True,
+    normalize_mode: str = "aggressive",
 ) -> Tuple[Dict[str, Dict[str, str]], List[Dict[str, str]]]:
     nodes: Dict[str, Dict[str, str]] = {}
     name_index: Dict[str, str] = {}
@@ -161,17 +177,38 @@ def build_graph_components_from_entities(
         if not name:
             continue
         ent_type = ent.get("type", "UNKNOWN") or "UNKNOWN"
-        name_norm = _normalize_entity_name(name)
+        name_norm = _normalize_entity_name(name, mode=normalize_mode)
+        if not name_norm:
+            continue
+        mention = {}
+        if ent.get("start_char") is not None and ent.get("end_char") is not None:
+            mention["start_char"] = ent.get("start_char")
+            mention["end_char"] = ent.get("end_char")
+            mention["surface"] = name
+        if ent.get("confidence") is not None:
+            mention["confidence"] = ent.get("confidence")
         if merge_entities:
             key = f"{ent_type}::{name_norm}"
             if key not in nodes:
                 nodes[key] = {
-                    "id": _entity_id(name, ent_type),
+                    "id": _entity_id(name, ent_type, name_norm=name_norm),
                     "name": name,
                     "type": ent_type,
                     "name_norm": name_norm,
+                    "mentions": [mention] if mention else [],
+                    "confidence": mention.get("confidence") if mention else None,
                 }
-                name_index.setdefault(name_norm, key)
+            else:
+                if len(name) > len(nodes[key]["name"]):
+                    nodes[key]["name"] = name
+                if mention:
+                    nodes[key]["mentions"].append(mention)
+                    conf = mention.get("confidence")
+                    if conf is not None:
+                        existing = nodes[key].get("confidence")
+                        if existing is None or conf > existing:
+                            nodes[key]["confidence"] = conf
+            name_index.setdefault(name_norm, key)
         else:
             key = str(uuid.uuid4())
             nodes[key] = {
@@ -179,6 +216,8 @@ def build_graph_components_from_entities(
                 "name": name,
                 "type": ent_type,
                 "name_norm": name_norm,
+                "mentions": [mention] if mention else [],
+                "confidence": mention.get("confidence") if mention else None,
             }
             name_index.setdefault(name_norm, key)
     cleaned_relations = []
@@ -188,26 +227,36 @@ def build_graph_components_from_entities(
         rel_type = rel.get("relation", "").strip() or "RELATED"
         if not source or not target:
             continue
-        source_norm = _normalize_entity_name(source)
-        target_norm = _normalize_entity_name(target)
+        source_norm = _normalize_entity_name(source, mode=normalize_mode)
+        target_norm = _normalize_entity_name(target, mode=normalize_mode)
+        if not source_norm or not target_norm:
+            continue
         source_key = name_index.get(source_norm)
         if source_key is None:
             source_key = f"UNKNOWN::{source_norm}" if merge_entities else str(uuid.uuid4())
             nodes[source_key] = {
-                "id": _entity_id(source, "UNKNOWN") if merge_entities else str(uuid.uuid4()),
+                "id": _entity_id(source, "UNKNOWN", name_norm=source_norm)
+                if merge_entities
+                else str(uuid.uuid4()),
                 "name": source,
                 "type": "UNKNOWN",
                 "name_norm": source_norm,
+                "mentions": [],
+                "confidence": None,
             }
             name_index.setdefault(source_norm, source_key)
         target_key = name_index.get(target_norm)
         if target_key is None:
             target_key = f"UNKNOWN::{target_norm}" if merge_entities else str(uuid.uuid4())
             nodes[target_key] = {
-                "id": _entity_id(target, "UNKNOWN") if merge_entities else str(uuid.uuid4()),
+                "id": _entity_id(target, "UNKNOWN", name_norm=target_norm)
+                if merge_entities
+                else str(uuid.uuid4()),
                 "name": target,
                 "type": "UNKNOWN",
                 "name_norm": target_norm,
+                "mentions": [],
+                "confidence": None,
             }
             name_index.setdefault(target_norm, target_key)
         cleaned_relations.append(
@@ -218,6 +267,19 @@ def build_graph_components_from_entities(
             }
         )
     return nodes, cleaned_relations
+
+
+def _select_primary_mention(mentions: List[Dict[str, Any]]) -> Dict[str, Any]:
+    if not mentions:
+        return {}
+    sorted_mentions = sorted(
+        mentions,
+        key=lambda m: (
+            -(m.get("confidence") or 0.0),
+            m.get("start_char") if m.get("start_char") is not None else 10**9,
+        ),
+    )
+    return sorted_mentions[0]
 
 
 def ingest_to_neo4j(
@@ -261,17 +323,26 @@ def ingest_to_neo4j(
                 name_norm=node["name_norm"],
             )
             if paragraph_text:
+                primary = _select_primary_mention(node.get("mentions", []))
                 session.run(
                     """
                     MATCH (p:Paragraph {source_id: $source_id, paragraph_id: $paragraph_id})
                     MATCH (e:Entity {id: $id})
                     MERGE (p)-[r:HAS_ENTITY]->(e)
                     SET r.source_id = $source_id,
-                        r.paragraph_id = $paragraph_id
+                        r.paragraph_id = $paragraph_id,
+                        r.confidence = $confidence,
+                        r.start_char = $start_char,
+                        r.end_char = $end_char,
+                        r.surface = $surface
                     """,
                     source_id=source_id,
                     paragraph_id=paragraph_id,
                     id=node["id"],
+                    confidence=node.get("confidence"),
+                    start_char=primary.get("start_char"),
+                    end_char=primary.get("end_char"),
+                    surface=primary.get("surface"),
                 )
         for rel in relations:
             session.run(
@@ -306,6 +377,7 @@ def ingest_to_neo4j_batch(driver, items: List[Dict[str, Any]]) -> None:
                 }
             )
         for node in item.get("nodes", {}).values():
+            primary = _select_primary_mention(node.get("mentions", []))
             entities.append(
                 {
                     "id": node["id"],
@@ -314,6 +386,10 @@ def ingest_to_neo4j_batch(driver, items: List[Dict[str, Any]]) -> None:
                     "name_norm": node["name_norm"],
                     "source_id": item["source_id"],
                     "paragraph_id": item["paragraph_id"],
+                    "confidence": node.get("confidence"),
+                    "start_char": primary.get("start_char"),
+                    "end_char": primary.get("end_char"),
+                    "surface": primary.get("surface"),
                 }
             )
         for rel in item.get("relations", []):
@@ -358,7 +434,11 @@ def ingest_to_neo4j_batch(driver, items: List[Dict[str, Any]]) -> None:
                 MATCH (e:Entity {id: row.id})
                 MERGE (p)-[r:HAS_ENTITY]->(e)
                 SET r.source_id = row.source_id,
-                    r.paragraph_id = row.paragraph_id
+                    r.paragraph_id = row.paragraph_id,
+                    r.confidence = row.confidence,
+                    r.start_char = row.start_char,
+                    r.end_char = row.end_char,
+                    r.surface = row.surface
                 """,
                 entities=entities,
             )
@@ -395,13 +475,21 @@ def ingest_to_qdrant(
     nodes: Dict[str, Dict[str, str]],
     source_id: str,
 ) -> None:
-    node_lookup = {node["name"].lower(): node["id"] for node in nodes.values()}
     vector = embedder.encode([paragraph])[0]
-    entity_ids = []
-    lower_para = paragraph.lower()
-    for name_lower, node_id in node_lookup.items():
-        if name_lower and name_lower in lower_para:
-            entity_ids.append(node_id)
+    entity_ids = list({node["id"] for node in nodes.values()})
+    entity_mentions: List[Dict[str, Any]] = []
+    for node in nodes.values():
+        primary = _select_primary_mention(node.get("mentions", []))
+        entity_mentions.append(
+            {
+                "id": node["id"],
+                "name": node["name"],
+                "type": node["type"],
+                "start_char": primary.get("start_char"),
+                "end_char": primary.get("end_char"),
+                "confidence": node.get("confidence"),
+            }
+        )
     point = qmodels.PointStruct(
         id=str(uuid.uuid4()),
         vector=vector.tolist(),
@@ -410,6 +498,7 @@ def ingest_to_qdrant(
             "source_id": source_id,
             "text": paragraph,
             "entity_ids": entity_ids,
+            "entity_mentions": entity_mentions,
         },
     )
     client.upsert(collection_name=collection, points=[point])
@@ -473,6 +562,7 @@ def process_text(
     gliner_labels = parse_gliner_labels(args.gliner_labels)
     use_gliner_batch = args.entity_provider == "gliner" and not args.no_batch
     merge_entities = not args.no_entity_merge
+    normalize_mode = args.entity_normalize_mode
     if args.no_batch:
         args.gliner_batch_size = 1
         args.neo4j_batch_size = 1
@@ -535,7 +625,10 @@ def process_text(
             )
             for (idx, paragraph), entities in zip(batch_items, batch_entities, strict=True):
                 nodes, relations = build_graph_components_from_entities(
-                    entities, [], merge_entities=merge_entities
+                    entities,
+                    [],
+                    merge_entities=merge_entities,
+                    normalize_mode=normalize_mode,
                 )
                 print(f"Paragraph {idx + 1}/{len(paragraphs)}: extracted {len(nodes)} entities.")
                 neo4j_batch.append(
@@ -564,6 +657,7 @@ def process_text(
                 gliner_labels=gliner_labels,
                 gliner_threshold=args.gliner_threshold,
                 merge_entities=merge_entities,
+                normalize_mode=normalize_mode,
             )
             print(f"Extracted {len(nodes)} entities, {len(relations)} relations.")
             neo4j_batch.append(
@@ -612,6 +706,12 @@ def main() -> None:
         choices=["spacy", "gliner", "gemini", "langextract"],
         default="gliner",
         help="Entity extraction provider",
+    )
+    parser.add_argument(
+        "--entity-normalize-mode",
+        choices=["basic", "aggressive"],
+        default="aggressive",
+        help="Normalization strength for entity merging.",
     )
     parser.add_argument("--spacy-model", default="en_core_web_sm")
     parser.add_argument("--ruler-json", default=None, help="Path to EntityRuler JSON patterns")

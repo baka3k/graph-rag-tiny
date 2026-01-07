@@ -21,14 +21,46 @@ DEFAULT_GLINER_LABELS = [
 ]
 
 
-def _normalize_entities(entities: List[Dict[str, Any]]) -> List[Dict[str, str]]:
-    normalized = []
+def _find_span(text: str, name: str) -> tuple[int, int] | None:
+    if not text or not name:
+        return None
+    lower_text = text.lower()
+    lower_name = name.lower()
+    start = lower_text.find(lower_name)
+    if start < 0:
+        return None
+    return start, start + len(name)
+
+
+def _normalize_entities(
+    entities: List[Dict[str, Any]], text: str | None = None
+) -> List[Dict[str, Any]]:
+    normalized: List[Dict[str, Any]] = []
     for item in entities or []:
         name = str(item.get("name", "")).strip()
         etype = str(item.get("type", "")).strip()
         if not name:
             continue
-        normalized.append({"name": name, "type": etype or "UNKNOWN"})
+        confidence = item.get("confidence")
+        if confidence is None:
+            confidence = item.get("score")
+        start_char = item.get("start_char")
+        if start_char is None:
+            start_char = item.get("start")
+        end_char = item.get("end_char")
+        if end_char is None:
+            end_char = item.get("end")
+        if (start_char is None or end_char is None) and text:
+            span = _find_span(text, name)
+            if span:
+                start_char, end_char = span
+        payload: Dict[str, Any] = {"name": name, "type": etype or "UNKNOWN"}
+        if confidence is not None:
+            payload["confidence"] = float(confidence)
+        if start_char is not None and end_char is not None:
+            payload["start_char"] = int(start_char)
+            payload["end_char"] = int(end_char)
+        normalized.append(payload)
     return normalized
 
 
@@ -198,7 +230,15 @@ def extract_entities_spacy(
 ) -> Tuple[List[Dict[str, str]], List[Dict[str, str]]]:
     nlp = build_spacy_pipeline(model, ruler_json=ruler_json)
     doc = nlp(text)
-    entities = [{"name": ent.text, "type": ent.label_} for ent in doc.ents]
+    entities = [
+        {
+            "name": ent.text,
+            "type": ent.label_,
+            "start_char": ent.start_char,
+            "end_char": ent.end_char,
+        }
+        for ent in doc.ents
+    ]
     return _normalize_entities(entities), []
 
 
@@ -212,8 +252,17 @@ def extract_entities_gliner(
     label_list = labels or list(DEFAULT_GLINER_LABELS)
     model_instance = gliner_model or build_gliner_model(model)
     predictions = model_instance.predict_entities(text, label_list, threshold=threshold)
-    entities = [{"name": item["text"], "type": item["label"]} for item in predictions]
-    return _normalize_entities(entities), []
+    entities = [
+        {
+            "name": item.get("text"),
+            "type": item.get("label"),
+            "confidence": item.get("score"),
+            "start_char": item.get("start") or item.get("start_char"),
+            "end_char": item.get("end") or item.get("end_char"),
+        }
+        for item in predictions
+    ]
+    return _normalize_entities(entities, text=text), []
 
 
 def _gliner_predictions_to_entities(predictions: List[Dict[str, Any]] | None) -> List[Dict[str, str]]:
@@ -221,7 +270,15 @@ def _gliner_predictions_to_entities(predictions: List[Dict[str, Any]] | None) ->
     for item in predictions or []:
         name = _coerce_attr(item.get("text"))
         label = _coerce_attr(item.get("label"))
-        entities.append({"name": name, "type": label})
+        entities.append(
+            {
+                "name": name,
+                "type": label,
+                "confidence": item.get("score"),
+                "start_char": item.get("start") or item.get("start_char"),
+                "end_char": item.get("end") or item.get("end_char"),
+            }
+        )
     return _normalize_entities(entities)
 
 
@@ -375,7 +432,7 @@ def extract_entities_gemini(text: str) -> Tuple[List[Dict[str, str]], List[Dict[
     except json.JSONDecodeError:
         data = {}
 
-    entities = _normalize_entities(data.get("entities", []))
+    entities = _normalize_entities(data.get("entities", []), text=text)
     relations = _normalize_relations(data.get("relations", []))
     return entities, relations
 
@@ -778,4 +835,4 @@ def extract_entities_langextract(text: str) -> Tuple[List[Dict[str, str]], List[
                 }
             )
 
-    return _normalize_entities(entities), _normalize_relations(relations)
+    return _normalize_entities(entities, text=text), _normalize_relations(relations)
