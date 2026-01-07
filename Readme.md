@@ -393,6 +393,7 @@ Two main steps:
 - The bridge between Qdrant and Neo4j is **`entity_ids`** from LangExtract/GLiNER ingest.(you can choose another, such as spaCy)
 - `entity_mentions` in Qdrant payload contains span/metadata when available.
 - Relation expansion is optional to balance speed vs depth.
+- Gating expansion: use `min_score_to_expand` and `min_entity_occurrences` to reduce noisy graph expansions.
 
 Pipeline (query):
 
@@ -446,6 +447,25 @@ query_graph_rag_langextract(
   max_passage_chars=800
 )
 ```
+
+``` 
+query_graph_rag_langextract(
+  query="zero trust policy for device identity",
+  top_k=8,
+  collection="graphrag_entities",
+  include_entities=true,
+  include_relations=true,
+  graph_depth=2,
+  min_score_to_expand=0.25,
+  min_entity_occurrences=2,
+  related_k=80,
+  max_passage_chars=900
+)
+```
+
+Notes:
+- `graph_depth=2` helps expand to second-order neighbors for discovery-style queries.
+- `min_entity_occurrences=2` reduces noise by expanding only entities that appear in multiple top passages.
 # Graph RAG
 
 <img src="resources/neo4j.png" alt="GraphRAG LangExtract">
@@ -457,3 +477,9 @@ query_graph_rag_langextract(
 # Use GraphRAG to create sequences diagram from Document
 
 <img src="resources/screenshot_2.png" alt="GraphRAG LangExtract">
+
+## Changelog (local)
+
+- Added graph expansion controls (`graph_depth`, `min_score_to_expand`, `min_entity_occurrences`) to query.
+- Ingest now stores entity metadata (confidence, span) in Neo4j `HAS_ENTITY` and Qdrant `entity_mentions`.
+- Added `--entity-normalize-mode` to control merge normalization strength.
