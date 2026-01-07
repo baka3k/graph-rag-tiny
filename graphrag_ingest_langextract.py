@@ -752,6 +752,12 @@ def main() -> None:
         action="store_true",
         help="Disable batching for GLiNER and Neo4j (sequential processing).",
     )
+    parser.add_argument(
+        "--batch",
+        action="store_false",
+        dest="no_batch",
+        help="Enable batching for GLiNER and Neo4j.",
+    )
     parser.add_argument("--langextract-model-id", default=os.getenv("LANGEXTRACT_MODEL_ID"))
     parser.add_argument("--langextract-model-url", default=os.getenv("LANGEXTRACT_MODEL_URL"))
     parser.add_argument("--llm-debug", action="store_true", help="Print raw LLM output")
@@ -770,6 +776,7 @@ def main() -> None:
     parser.add_argument("--qdrant-host", default=os.getenv("QDRANT_HOST", "localhost"))
     parser.add_argument("--qdrant-port", type=int, default=int(os.getenv("QDRANT_PORT", "6333")))
     parser.add_argument("--qdrant-api-key", default=os.getenv("QDRANT_KEY"))
+    parser.set_defaults(no_batch=True)
     args = parser.parse_args()
 
     _load_env()

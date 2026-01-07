@@ -165,6 +165,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--md`, `--docx`, 
 - `--no-entity-merge`: Do not merge entities across paragraphs (per-paragraph IDs).
 - `--entity-normalize-mode`: Entity normalization strength for merging (`basic` or `aggressive`, default: `aggressive`).
 - `--no-batch`: Disable batching for GLiNER and Neo4j (sequential processing).
+- `--batch`: Enable batching for GLiNER and Neo4j.
 - `--langextract-model-id`: Override `LANGEXTRACT_MODEL_ID` for LangExtract.
 - `--langextract-model-url`: Override `LANGEXTRACT_MODEL_URL` (e.g., Ollama URL).
 - `--llm-debug`: Print raw LLM output and log to `logs/langextract_raw.log`.
@@ -210,7 +211,8 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--md`, `--docx`, 
 | Entity | `--gliner-batch-size` | GLiNER extraction batch size | `8` |
 | Entity | `--no-entity-merge` | Do not merge entities across paragraphs | `false` |
 | Entity | `--entity-normalize-mode` | Entity normalization strength | `aggressive` |
-| Entity | `--no-batch` | Disable batching (sequential processing) | `false` |
+| Entity | `--no-batch` | Disable batching (sequential processing) | `true` |
+| Entity | `--batch` | Enable batching | `false` |
 | Entity | `--langextract-model-id` | Override LangExtract model id | env `LANGEXTRACT_MODEL_ID` |
 | Entity | `--langextract-model-url` | Override LangExtract URL | env `LANGEXTRACT_MODEL_URL` |
 | LLM | `--llm-debug` | Print raw LLM output | `false` |
@@ -251,6 +253,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--md`, `--docx`, 
 - `--no-entity-merge`: Do not merge entities across paragraphs (per-paragraph IDs).
 - `--entity-normalize-mode`: Entity normalization strength for merging (`basic` or `aggressive`, default: `aggressive`).
 - `--no-batch`: Disable batching for GLiNER and Neo4j (sequential processing).
+- `--batch`: Enable batching for GLiNER and Neo4j.
 - `--langextract-model-id`: Override `LANGEXTRACT_MODEL_ID` for LangExtract.
 - `--langextract-model-url`: Override `LANGEXTRACT_MODEL_URL` (e.g., Ollama URL).
 - `--llm-debug`: Print raw LLM output and log to `logs/langextract_raw.log`.
@@ -493,3 +496,4 @@ Notes:
 - Added heuristic rerank controls (`rerank_*`) for passage ordering.
 - Ingest now stores entity metadata (confidence, span) in Neo4j `HAS_ENTITY` and Qdrant `entity_mentions`.
 - Added `--entity-normalize-mode` to control merge normalization strength.
+- Default ingest is now non-batch; use `--batch` to enable batching.
