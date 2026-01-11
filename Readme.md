@@ -118,6 +118,12 @@ http://127.0.0.1:8789/mcp
 
 ## Ingest flow (GraphRAG LangExtract)
 
+### Step 0: create Neo4j indexes (recommended)
+
+```bash
+python 6_setup_indexes.py
+```
+
 ### Step 1: run `graphrag_ingest_langextract.py`
 
 This command:
@@ -177,7 +183,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--md`, `--docx`, 
 - `--gliner-batch-size`: Batch size for GLiNER extraction (default: `8`).
 - `--no-entity-merge`: Do not merge entities across paragraphs (per-paragraph IDs).
 - `--entity-normalize-mode`: Entity normalization strength for merging (`basic` or `aggressive`, default: `aggressive`).
-- `--no-batch`: Disable batching for GLiNER and Neo4j (sequential processing).
+- `--no-batch`: Disable batching for GLiNER and Neo4j (sequential processing, default is batching enabled).
 - `--batch`: Enable batching for GLiNER and Neo4j.
 - `--langextract-model-id`: Override `LANGEXTRACT_MODEL_ID` for LangExtract.
 - `--langextract-model-url`: Override `LANGEXTRACT_MODEL_URL` (e.g., Ollama URL).
@@ -225,7 +231,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--md`, `--docx`, 
 | Entity | `--gliner-batch-size`     | GLiNER extraction batch size                                                        | `8`                                                |
 | Entity | `--no-entity-merge`       | Do not merge entities across paragraphs                                             | `false`                                            |
 | Entity | `--entity-normalize-mode` | Entity normalization strength                                                       | `aggressive`                                       |
-| Entity | `--no-batch`              | Disable batching (sequential processing)                                            | `true`                                             |
+| Entity | `--no-batch`              | Disable batching (sequential processing)                                            | `false`                                            |
 | Entity | `--batch`                 | Enable batching                                                                     | `false`                                            |
 | Entity | `--langextract-model-id`  | Override LangExtract model id                                                       | env `LANGEXTRACT_MODEL_ID`                         |
 | Entity | `--langextract-model-url` | Override LangExtract URL                                                            | env `LANGEXTRACT_MODEL_URL`                        |
@@ -266,7 +272,7 @@ Exactly one input source is required: `--pdf`, `--text-file`, `--md`, `--docx`, 
 - `--gliner-batch-size`: Batch size for GLiNER extraction (default: `8`).
 - `--no-entity-merge`: Do not merge entities across paragraphs (per-paragraph IDs).
 - `--entity-normalize-mode`: Entity normalization strength for merging (`basic` or `aggressive`, default: `aggressive`).
-- `--no-batch`: Disable batching for GLiNER and Neo4j (sequential processing).
+- `--no-batch`: Disable batching for GLiNER and Neo4j (sequential processing, default is batching enabled).
 - `--batch`: Enable batching for GLiNER and Neo4j.
 - `--langextract-model-id`: Override `LANGEXTRACT_MODEL_ID` for LangExtract.
 - `--langextract-model-url`: Override `LANGEXTRACT_MODEL_URL` (e.g., Ollama URL).
@@ -384,6 +390,10 @@ python graphrag_ingest_langextract.py \
 
 ```bash
 python 0_reset_all.py --neo4j-pass neo4j_pass
+```
+
+```bash
+python 6_setup_indexes.py
 ```
 
 ## Query flow (GraphRAG LangExtract)
@@ -513,4 +523,4 @@ Notes:
 - Added heuristic rerank controls (`rerank_*`) for passage ordering.
 - Ingest now stores entity metadata (confidence, span) in Neo4j `HAS_ENTITY` and Qdrant `entity_mentions`.
 - Added `--entity-normalize-mode` to control merge normalization strength.
-- Default ingest is now non-batch; use `--batch` to enable batching.
+- Default ingest is now batch-enabled; use `--no-batch` to disable batching.
