@@ -5,6 +5,8 @@ from neo4j import GraphDatabase
 
 INDEX_STATEMENTS = [
     "CREATE INDEX chunk_doc_idx IF NOT EXISTS FOR (c:Chunk) ON (c.doc_id, c.id)",
+    "CREATE INDEX paragraph_source_idx IF NOT EXISTS FOR (p:Paragraph) ON (p.source_id, p.paragraph_id)",
+    "CREATE INDEX entity_id_idx IF NOT EXISTS FOR (e:Entity) ON (e.id)",
     "CREATE INDEX entity_name_idx IF NOT EXISTS FOR (e:Entity) ON (e.name)",
     "CREATE INDEX entity_type_idx IF NOT EXISTS FOR (e:Entity) ON (e.type)",
     "CREATE INDEX document_id_idx IF NOT EXISTS FOR (d:Document) ON (d.id)",

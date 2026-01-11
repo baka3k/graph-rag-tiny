@@ -457,6 +457,7 @@ def ingest_to_neo4j_batch(driver, items: List[Dict[str, Any]]) -> None:
 def create_collection(client: QdrantClient, name: str, vector_size: int) -> None:
     try:
         client.get_collection(name)
+        ensure_payload_indexes(client, name)
         return
     except Exception:
         pass
@@ -464,6 +465,29 @@ def create_collection(client: QdrantClient, name: str, vector_size: int) -> None
         collection_name=name,
         vectors_config=qmodels.VectorParams(size=vector_size, distance=qmodels.Distance.COSINE),
     )
+    ensure_payload_indexes(client, name)
+
+
+def ensure_payload_indexes(client: QdrantClient, name: str) -> None:
+    index_defs = [
+        ("source_id", qmodels.PayloadSchemaType.KEYWORD),
+        ("paragraph_id", qmodels.PayloadSchemaType.INTEGER),
+    ]
+    for field_name, field_schema in index_defs:
+        try:
+            client.create_payload_index(
+                collection_name=name,
+                field_name=field_name,
+                field_schema=field_schema,
+            )
+        except TypeError:
+            client.create_payload_index(
+                collection_name=name,
+                field_name=field_name,
+                schema=field_schema,
+            )
+        except Exception:
+            continue
 
 
 def ingest_to_qdrant(
@@ -776,7 +800,7 @@ def main() -> None:
     parser.add_argument("--qdrant-host", default=os.getenv("QDRANT_HOST", "localhost"))
     parser.add_argument("--qdrant-port", type=int, default=int(os.getenv("QDRANT_PORT", "6333")))
     parser.add_argument("--qdrant-api-key", default=os.getenv("QDRANT_KEY"))
-    parser.set_defaults(no_batch=True)
+    parser.set_defaults(no_batch=False)
     args = parser.parse_args()
 
     _load_env()
