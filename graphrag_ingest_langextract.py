@@ -15,7 +15,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 from sentence_transformers import SentenceTransformer
 
-from embedding_utils import resolve_embedding_model
+from embedding_utils import resolve_embedding_device, resolve_embedding_model
 
 try:
     from dotenv import load_dotenv
@@ -703,6 +703,7 @@ def main() -> None:
         default=os.getenv("QDRANT_COLLECTION_RAG", "graphrag_entities"),
     )
     parser.add_argument("--embedding-model", default=None)
+    parser.add_argument("--embedding-device", default=None)
     parser.add_argument("--max-paragraph-chars", type=int, default=1200)
     parser.add_argument("--min-paragraph-chars", type=int, default=150)
     parser.add_argument(
@@ -824,7 +825,8 @@ def main() -> None:
     model_name, local_files_only = resolve_embedding_model(
         args.embedding_model, "sentence-transformers/all-MiniLM-L6-v2"
     )
-    embedder = SentenceTransformer(model_name, local_files_only=local_files_only)
+    device = resolve_embedding_device(args.embedding_device)
+    embedder = SentenceTransformer(model_name, local_files_only=local_files_only, device=device)
 
     if args.qdrant_url:
         qdrant = QdrantClient(url=args.qdrant_url, api_key=args.qdrant_api_key)

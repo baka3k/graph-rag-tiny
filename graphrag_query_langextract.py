@@ -9,7 +9,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 from sentence_transformers import SentenceTransformer
 
-from embedding_utils import resolve_embedding_model
+from embedding_utils import resolve_embedding_device, resolve_embedding_model
 
 try:
     from dotenv import load_dotenv
@@ -166,6 +166,7 @@ def main() -> None:
     parser.add_argument("--collection", default="graphrag_entities")
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--embedding-model", default=None)
+    parser.add_argument("--embedding-device", default=None)
     parser.add_argument("--neo4j-uri", default=os.getenv("NEO4J_URI", "bolt://localhost:7687"))
     parser.add_argument("--neo4j-user", default=os.getenv("NEO4J_USER", "neo4j"))
     parser.add_argument("--neo4j-pass", default=os.getenv("NEO4J_PASS", "password"))
@@ -184,7 +185,8 @@ def main() -> None:
     model_name, local_files_only = resolve_embedding_model(
         args.embedding_model, "sentence-transformers/all-MiniLM-L6-v2"
     )
-    embedder = SentenceTransformer(model_name, local_files_only=local_files_only)
+    device = resolve_embedding_device(args.embedding_device)
+    embedder = SentenceTransformer(model_name, local_files_only=local_files_only, device=device)
     query_vector = embedder.encode([args.query])[0].tolist()
 
     if args.qdrant_url:

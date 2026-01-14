@@ -23,3 +23,12 @@ def resolve_embedding_model(model: str | None, default: str) -> Tuple[str, bool]
         os.environ.setdefault("HF_HUB_OFFLINE", "1")
         os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
     return selected, local_files_only
+
+
+def resolve_embedding_device(device: str | None) -> str:
+    if device:
+        return device
+    env_device = os.getenv("EMBEDDING_DEVICE")
+    if env_device:
+        return env_device
+    return "cpu"

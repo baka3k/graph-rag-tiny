@@ -57,6 +57,7 @@ QDRANT_COLLECTION_RAG=graph_rag_entities
 
 EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 EMBEDDING_MODEL_PATH=/Users/youruser/tool/ai/all-MiniLM-L6-v2
+EMBEDDING_DEVICE=cpu # or cuda, mps
 GLINER_MODEL_NAME=urchade/gliner_mediumv2
 GLINER_MODEL_PATH=/Users/youruser/tool/ai/gliner_medium-v2.1
 EMBEDDING_LOCAL_ONLY=1

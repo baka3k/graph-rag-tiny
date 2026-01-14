@@ -10,7 +10,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 from sentence_transformers import SentenceTransformer
 
-from embedding_utils import resolve_embedding_model
+from embedding_utils import resolve_embedding_device, resolve_embedding_model
 
 
 MCP_NAME = "graph_rag"
@@ -82,7 +82,10 @@ def get_embedder() -> SentenceTransformer:
     global _embedder
     if _embedder is None:
         model_name, local_files_only = resolve_embedding_model(None, DEFAULT_EMBEDDING_MODEL)
-        _embedder = SentenceTransformer(model_name, local_files_only=local_files_only)
+        device = resolve_embedding_device(None)
+        _embedder = SentenceTransformer(
+            model_name, local_files_only=local_files_only, device=device
+        )
     return _embedder
 
 
