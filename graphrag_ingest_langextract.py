@@ -466,6 +466,9 @@ def create_collection(client: QdrantClient, name: str, vector_size: int) -> None
     )
 
 
+_PRINTED_COLLECTIONS: set[str] = set()
+
+
 def ingest_to_qdrant(
     client: QdrantClient,
     collection: str,
@@ -489,7 +492,7 @@ def ingest_to_qdrant(
                 "end_char": primary.get("end_char"),
                 "confidence": node.get("confidence"),
             }
-        )
+    )
     point = qmodels.PointStruct(
         id=str(uuid.uuid4()),
         vector=vector.tolist(),
@@ -501,6 +504,9 @@ def ingest_to_qdrant(
             "entity_mentions": entity_mentions,
         },
     )
+    if collection not in _PRINTED_COLLECTIONS:
+        print(f"Upserting into Qdrant collection: {collection}")
+        _PRINTED_COLLECTIONS.add(collection)
     client.upsert(collection_name=collection, points=[point])
 
 
@@ -692,7 +698,10 @@ def main() -> None:
         help="Folder to scan for .pdf/.txt/.md/.docx/.pptx/.xlsx files (recursive)",
     )
     parser.add_argument("--source-id", default=None, help="Custom source identifier")
-    parser.add_argument("--collection", default="graphrag_entities")
+    parser.add_argument(
+        "--collection",
+        default=os.getenv("QDRANT_COLLECTION_RAG", "graphrag_entities"),
+    )
     parser.add_argument("--embedding-model", default=None)
     parser.add_argument("--max-paragraph-chars", type=int, default=1200)
     parser.add_argument("--min-paragraph-chars", type=int, default=150)

@@ -53,7 +53,7 @@ NEO4J_USER=neo4j
 NEO4J_PASS=neo4j_pass
 QDRANT_HOST=localhost
 QDRANT_PORT=6333
-QDRANT_COLLECTION=graphrag_entities
+QDRANT_COLLECTION_RAG=graph_rag_entities
 
 EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 EMBEDDING_MODEL_PATH=/Users/youruser/tool/ai/all-MiniLM-L6-v2
