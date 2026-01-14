@@ -42,7 +42,7 @@ def main() -> None:
     parser.add_argument("--qdrant-api-key", default=os.getenv("QDRANT_KEY"))
     parser.add_argument(
         "--qdrant-collection",
-        default=os.getenv("QDRANT_COLLECTION", "graphrag_entities"),
+        default=os.getenv("QDRANT_COLLECTION_RAG", "graphrag_entities"),
     )
     args = parser.parse_args()
 
