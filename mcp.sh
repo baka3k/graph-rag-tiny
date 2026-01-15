@@ -1,0 +1,2 @@
+piprenv
+python mcp_graph_rag.py --host 127.0.0.1 --port 8789 --transport streamable-http --path /mcp
